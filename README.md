@@ -5,9 +5,9 @@
 *Encrypted with [age](https://github.com/FiloSottile/age) • Cloudflare R2 (10GB Free Tier)*
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![npm](https://img.shields.io/npm/v/@karonan/antigravity-sync)](https://www.npmjs.com/package/@karonan/antigravity-sync)
+[![Release](https://img.shields.io/github/v/release/Karonan/antigravity-sync)](https://github.com/Karonan/antigravity-sync/releases)
 
-[Quick Start](#quick-start) • [Setup Guide](#setup-guide) • [What Gets Synced](#what-gets-synced) • [Commands](#commands) • [Architecture](#architecture)
+[Install](#install) • [Quick Start](#quick-start) • [Setup Guide](#setup-guide) • [What Gets Synced](#what-gets-synced) • [Commands](#commands) • [Architecture](#architecture)
 
 </div>
 
@@ -28,14 +28,25 @@
 
 ---
 
+## Install
+
+Download the binary for your platform from [GitHub Releases](https://github.com/Karonan/antigravity-sync/releases/latest), rename it to `antigravity-sync` (`antigravity-sync.exe` on Windows), and put it somewhere on your `PATH`.
+
+Or build it with Go 1.24+:
+
+```bash
+go install github.com/Karonan/antigravity-sync/cmd/antigravity-sync@latest
+```
+
+Later, `antigravity-sync update` downloads the newest release.
+
+---
+
 ## Quick Start
 
 ### First Device
 
 ```bash
-# Install globally
-npm install -g @karonan/antigravity-sync
-
 # Run setup wizard
 antigravity-sync init
 
@@ -46,9 +57,6 @@ antigravity-sync push
 ### Second Device
 
 ```bash
-# Install globally
-npm install -g @karonan/antigravity-sync
-
 # Run setup wizard with SAME credentials and passphrase
 antigravity-sync init
 

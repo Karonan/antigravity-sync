@@ -26,7 +26,6 @@ jobs:
       - name: Run coverage on library packages
         run: |
           go test -coverprofile=coverage.out -covermode=atomic \
-            ./internal/claudesettings/ \
             ./internal/config/ \
             ./internal/crypto/ \
             ./internal/paths/ \
@@ -55,16 +54,6 @@ jobs:
 
       - name: Build
         run: go build ./...
-
-      # The npm installer is the primary distribution path but has no Go
-      # coverage. Its redirect allowlist broke silently once already.
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Test npm installer
-        run: node --test
 
   lint:
     runs-on: ubuntu-latest

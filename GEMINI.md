@@ -4,7 +4,7 @@ This file provides architectural guidance and reference for Antigravity when wor
 
 ## Repository Purpose
 
-`antigravity-sync` is a Go CLI that syncs `~/.gemini/` (Antigravity conversations, summaries, artifacts, project definitions, custom skills, and configs) across devices via encrypted cloud storage with Cloudflare R2 (10 GB free tier, zero egress fees). Files are gzip-compressed, then age-encrypted before upload. The canonical binary is distributed as pre-compiled platform-specific npm packages; a Node wrapper at `bin/antigravity-sync.js` dispatches to the right binary.
+`antigravity-sync` is a Go CLI that syncs `~/.gemini/` (Antigravity conversations, summaries, artifacts, project definitions, custom skills, and configs) across devices via encrypted cloud storage with Cloudflare R2 (10 GB free tier, zero egress fees). Files are gzip-compressed, then age-encrypted before upload. Pre-built binaries for each platform are attached to GitHub Releases, which `antigravity-sync update` downloads from.
 
 ## Common Commands
 

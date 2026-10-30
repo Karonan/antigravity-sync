@@ -60,7 +60,7 @@ deps:
 	$(GO) mod download
 	$(GO) mod tidy
 
-# Dry run semantic-release (requires npm packages)
+# Dry run semantic-release (needs Node.js for npx)
 release-dry-run:
 	npx semantic-release --dry-run
 

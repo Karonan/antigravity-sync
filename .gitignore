@@ -1,4 +1,4 @@
-# Binaries (but keep npm wrapper)
+# Binaries
 bin/antigravity-sync
 bin/antigravity-sync.exe
 bin/antigravity-sync-*
@@ -9,9 +9,6 @@ bin/antigravity-sync-*
 /antigravity-sync
 /antigravity-sync.exe
 
-# Platform package binaries (added during publish, not committed)
-npm/*/antigravity-sync
-npm/*/antigravity-sync.exe
 *.exe
 *.exe~
 *.dll

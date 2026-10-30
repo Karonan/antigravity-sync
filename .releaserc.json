@@ -42,6 +42,14 @@
             "label": "antigravity-sync-linux-arm64"
           },
           {
+            "path": "bin/antigravity-sync-windows-amd64.exe",
+            "label": "antigravity-sync-windows-amd64.exe"
+          },
+          {
+            "path": "bin/antigravity-sync-windows-arm64.exe",
+            "label": "antigravity-sync-windows-arm64.exe"
+          },
+          {
             "path": "bin/checksums.txt",
             "label": "checksums.txt"
           }
