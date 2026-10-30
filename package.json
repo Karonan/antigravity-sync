@@ -1,0 +1,50 @@
+{
+  "name": "@tawandotorg/antigravity-sync",
+  "version": "0.1.0",
+  "description": "Sync Google Antigravity conversations, projects, and skills across devices with encrypted cloud storage",
+  "bin": {
+    "antigravity-sync": "./bin/antigravity-sync.js",
+    "agy-sync": "./bin/antigravity-sync.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "antigravity",
+    "antigravity-sync",
+    "agy",
+    "google-antigravity",
+    "sync",
+    "cli",
+    "gemini",
+    "r2",
+    "s3",
+    "gcs",
+    "webdav",
+    "nextcloud",
+    "encryption",
+    "age"
+  ],
+  "author": "tawanorg",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Karonan/antigravity-sync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Karonan/antigravity-sync/issues"
+  },
+  "homepage": "https://github.com/Karonan/antigravity-sync#readme",
+  "engines": {
+    "node": ">=14"
+  },
+  "optionalDependencies": {
+    "@tawandotorg/antigravity-sync-darwin-arm64": "0.1.0",
+    "@tawandotorg/antigravity-sync-darwin-x64": "0.1.0",
+    "@tawandotorg/antigravity-sync-linux-arm64": "0.1.0",
+    "@tawandotorg/antigravity-sync-linux-x64": "0.1.0",
+    "@tawandotorg/antigravity-sync-win32-arm64": "0.1.0",
+    "@tawandotorg/antigravity-sync-win32-x64": "0.1.0"
+  }
+}

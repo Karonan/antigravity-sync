@@ -1,0 +1,46 @@
+# Binaries (but keep npm wrapper)
+bin/antigravity-sync
+bin/antigravity-sync.exe
+bin/antigravity-sync-*
+
+# Root-level build output. `make build` targets ./bin, but a plain
+# `go build -o antigravity-sync ./cmd/antigravity-sync` drops a ~55MB binary here,
+# which a `git add -A` would commit into history permanently.
+/antigravity-sync
+/antigravity-sync.exe
+
+# Platform package binaries (added during publish, not committed)
+npm/*/antigravity-sync
+npm/*/antigravity-sync.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local config (contains secrets)
+.antigravity-sync/
+.npmrc
+.env
+.env.*

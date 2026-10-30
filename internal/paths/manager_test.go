@@ -1,0 +1,322 @@
+package paths
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/Karonan/antigravity-sync/internal/config"
+)
+
+func TestNewManager(t *testing.T) {
+	// With empty paths, should use defaults
+	m := NewManager(nil, nil, "/tmp/test", config.ScopeFull)
+	if len(m.SyncPaths()) != len(DefaultSyncPaths(config.ScopeFull)) {
+		t.Errorf("Expected %d default paths, got %d", len(DefaultSyncPaths(config.ScopeFull)), len(m.SyncPaths()))
+	}
+
+	// With custom paths, should use those
+	custom := []string{"path1", "path2"}
+	m = NewManager(custom, nil, "/tmp/test", config.ScopeFull)
+	if len(m.SyncPaths()) != 2 {
+		t.Errorf("Expected 2 paths, got %d", len(m.SyncPaths()))
+	}
+}
+
+func TestAddPath(t *testing.T) {
+	m := NewManager([]string{"existing"}, nil, "/tmp/nonexistent", config.ScopeFull)
+
+	// Add new path
+	result := m.Add("newpath")
+	if !result.Added {
+		t.Error("Expected Added=true")
+	}
+	if result.PathMissing != true {
+		t.Error("Expected PathMissing=true for non-existent path")
+	}
+	if !m.HasPath("newpath") {
+		t.Error("newpath should be in sync paths")
+	}
+
+	// Add existing path
+	result = m.Add("existing")
+	if !result.AlreadyExists {
+		t.Error("Expected AlreadyExists=true")
+	}
+	if result.Added {
+		t.Error("Should not add duplicate")
+	}
+}
+
+func TestAddPathRemovesConflictingExcludes(t *testing.T) {
+	m := NewManager([]string{"a"}, []string{"b", "b/*", "c/**"}, "/tmp/test", config.ScopeFull)
+
+	// Add 'b' should remove 'b' and 'b/*' excludes
+	result := m.Add("b")
+	if result.ExcludesRemoved != 2 {
+		t.Errorf("Expected 2 excludes removed, got %d", result.ExcludesRemoved)
+	}
+	if m.HasExclude("b") || m.HasExclude("b/*") {
+		t.Error("Conflicting excludes should be removed")
+	}
+	if !m.HasExclude("c/**") {
+		t.Error("Unrelated exclude should remain")
+	}
+}
+
+func TestRemovePath(t *testing.T) {
+	m := NewManager([]string{"CLAUDE.md", "custom"}, nil, "/tmp/test", config.ScopeFull)
+
+	// Remove non-existent
+	result := m.Remove("nonexistent")
+	if !result.NotFound {
+		t.Error("Expected NotFound=true")
+	}
+
+	// Remove custom path (not a default)
+	result = m.Remove("custom")
+	if !result.Removed {
+		t.Error("Expected Removed=true")
+	}
+	if result.IsDefault {
+		t.Error("'custom' is not a default path")
+	}
+	if result.ExcludeAdded != "" {
+		t.Error("Custom path removal should not add exclude")
+	}
+
+	// Remove default path
+	m = NewManager([]string{"GEMINI.md"}, nil, "/tmp/test", config.ScopeFull)
+	result = m.Remove("GEMINI.md")
+	if !result.Removed {
+		t.Error("Expected Removed=true")
+	}
+	if !result.IsDefault {
+		t.Error("GEMINI.md is a default path")
+	}
+	if result.ExcludeAdded == "" {
+		t.Error("Default path removal should add exclude")
+	}
+}
+
+func TestRemoveDefaultPathAddsExclude(t *testing.T) {
+	tmpDir := t.TempDir()
+	geminiDir := filepath.Join(tmpDir, ".gemini")
+
+	// Create a directory to test dir detection
+	skillsDir := filepath.Join(geminiDir, "config", "skills")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(nil, nil, geminiDir, config.ScopeFull)
+
+	// Remove 'config/skills' (a directory)
+	result := m.Remove("config/skills")
+	if result.ExcludeAdded != "config/skills/*" {
+		t.Errorf("Expected exclude 'config/skills/*', got %q", result.ExcludeAdded)
+	}
+
+	// Verify exclude was added
+	if !m.HasExclude("config/skills/*") {
+		t.Error("Exclude should be in list")
+	}
+}
+
+func TestAddExclude(t *testing.T) {
+	m := NewManager([]string{"plugins"}, []string{"existing/*"}, "/tmp/test", config.ScopeFull)
+
+	// Add new exclude
+	result := m.AddExclude("plugins/**/node_modules/**")
+	if !result.Added {
+		t.Error("Expected Added=true")
+	}
+
+	// Add duplicate
+	result = m.AddExclude("existing/*")
+	if !result.AlreadyExists {
+		t.Error("Expected AlreadyExists=true")
+	}
+
+	// Try to exclude a sync path directly
+	result = m.AddExclude("plugins")
+	if !result.IsSyncPath {
+		t.Error("Expected IsSyncPath=true - should use Remove instead")
+	}
+	if result.Added {
+		t.Error("Should not add sync path as exclude")
+	}
+}
+
+func TestRemoveExclude(t *testing.T) {
+	m := NewManager(nil, []string{"a/*", "b/**"}, "/tmp/test", config.ScopeFull)
+
+	// Remove existing
+	result := m.RemoveExclude("a/*")
+	if !result.Removed {
+		t.Error("Expected Removed=true")
+	}
+	if m.HasExclude("a/*") {
+		t.Error("Exclude should be removed")
+	}
+
+	// Remove non-existent
+	result = m.RemoveExclude("nonexistent")
+	if !result.NotFound {
+		t.Error("Expected NotFound=true")
+	}
+}
+
+func TestReset(t *testing.T) {
+	m := NewManager(
+		[]string{"custom1", "custom2"},
+		[]string{"exclude1", "exclude2"},
+		"/tmp/test",
+		config.ScopeFull,
+	)
+
+	m.Reset()
+
+	if len(m.SyncPaths()) != len(DefaultSyncPaths(config.ScopeFull)) {
+		t.Errorf("Expected %d default paths after reset, got %d", len(DefaultSyncPaths(config.ScopeFull)), len(m.SyncPaths()))
+	}
+	if len(m.Excludes()) != 0 {
+		t.Errorf("Expected 0 excludes after reset, got %d", len(m.Excludes()))
+	}
+}
+
+func TestIsDefault(t *testing.T) {
+	m := NewManager(nil, nil, "/tmp/test", config.ScopeFull)
+
+	if !m.IsDefault("GEMINI.md") {
+		t.Error("GEMINI.md should be a default")
+	}
+	if !m.IsDefault("config/config.json") {
+		t.Error("config/config.json should be a default")
+	}
+	if m.IsDefault("custom-path") {
+		t.Error("custom-path should not be a default")
+	}
+}
+
+func TestStatus(t *testing.T) {
+	// Default state
+	m := NewManager(nil, nil, "/tmp/test", config.ScopeFull)
+	status := m.Status()
+	if status.IsCustomized {
+		t.Error("Default manager should not be customized")
+	}
+	if len(status.CustomPaths) != 0 {
+		t.Error("No custom paths expected")
+	}
+
+	// Add custom path
+	m.Add("my-custom")
+	status = m.Status()
+	if !status.IsCustomized {
+		t.Error("Should be customized after adding path")
+	}
+	if len(status.CustomPaths) != 1 || status.CustomPaths[0] != "my-custom" {
+		t.Error("Custom path not tracked")
+	}
+
+	// Remove default and check removed defaults tracking
+	m = NewManager(nil, []string{"GEMINI.md"}, "/tmp/test", config.ScopeFull)
+	status = m.Status()
+	if len(status.RemovedDefaults) != 1 {
+		t.Errorf("Expected 1 removed default, got %d", len(status.RemovedDefaults))
+	}
+}
+
+func TestHasPath(t *testing.T) {
+	m := NewManager([]string{"a", "b"}, nil, "/tmp/test", config.ScopeFull)
+
+	if !m.HasPath("a") {
+		t.Error("Should have path 'a'")
+	}
+	if m.HasPath("c") {
+		t.Error("Should not have path 'c'")
+	}
+}
+
+func TestHasExclude(t *testing.T) {
+	m := NewManager(nil, []string{"*.tmp", "cache/**"}, "/tmp/test", config.ScopeFull)
+
+	if !m.HasExclude("*.tmp") {
+		t.Error("Should have exclude '*.tmp'")
+	}
+	if m.HasExclude("*.log") {
+		t.Error("Should not have exclude '*.log'")
+	}
+}
+
+func TestIntegrationWorkflow(t *testing.T) {
+	tmpDir := t.TempDir()
+	geminiDir := filepath.Join(tmpDir, ".gemini")
+	if err := os.MkdirAll(geminiDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start fresh
+	m := NewManager(nil, nil, geminiDir, config.ScopeFull)
+
+	// 1. Remove a default path
+	result := m.Remove("GEMINI.md")
+	if !result.Removed || !result.IsDefault {
+		t.Error("Should remove default")
+	}
+	if !m.HasExclude("GEMINI.md") {
+		t.Error("Should add exclude for removed default")
+	}
+
+	// Capture current state
+	currentPaths := append([]string{}, m.SyncPaths()...)
+	currentExcludes := append([]string{}, m.Excludes()...)
+
+	// 2. Simulate re-adding with the saved state (like after config reload)
+	// This simulates: user removed GEMINI.md, config was saved with
+	// modified syncPaths (without GEMINI.md) and excludes (with GEMINI.md)
+	m = NewManager(currentPaths, currentExcludes, geminiDir, config.ScopeFull)
+
+	// Verify GEMINI.md is NOT in sync paths but IS in excludes
+	if m.HasPath("GEMINI.md") {
+		t.Error("GEMINI.md should not be in sync paths")
+	}
+	if !m.HasExclude("GEMINI.md") {
+		t.Error("GEMINI.md should be in excludes")
+	}
+
+	// 3. Add path back should work and remove the exclude
+	result2 := m.Add("GEMINI.md")
+	if !result2.Added {
+		t.Error("Should add GEMINI.md back")
+	}
+	if result2.ExcludesRemoved != 1 {
+		t.Errorf("Should remove 1 exclude, got %d", result2.ExcludesRemoved)
+	}
+	if m.HasExclude("GEMINI.md") {
+		t.Error("GEMINI.md exclude should be removed")
+	}
+
+	// 4. Add custom path
+	m.Add("my-notes")
+	status := m.Status()
+	if len(status.CustomPaths) != 1 {
+		t.Error("Should have 1 custom path")
+	}
+
+	// 5. Add sub-path filter
+	m.AddExclude("plugins/**/node_modules/**")
+	if !m.HasExclude("plugins/**/node_modules/**") {
+		t.Error("Should have the exclude")
+	}
+
+	// 6. Reset clears everything
+	m.Reset()
+	if !m.HasPath("GEMINI.md") {
+		t.Error("Reset should restore defaults including GEMINI.md")
+	}
+	if len(m.Excludes()) != 0 {
+		t.Error("Reset should clear excludes")
+	}
+}

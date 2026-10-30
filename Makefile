@@ -1,0 +1,80 @@
+.PHONY: build install clean test fmt lint release-dry-run setup-hooks check
+
+BINARY_NAME=antigravity-sync
+VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_DIR=bin
+GO=go
+
+# Build flags
+LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION)"
+
+# Default target
+all: build
+
+# Build the binary
+build:
+	$(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/antigravity-sync
+
+# Install to GOPATH/bin
+install:
+	$(GO) install $(LDFLAGS) ./cmd/antigravity-sync
+
+# Clean build artifacts
+clean:
+	rm -rf $(BUILD_DIR)
+
+# Run tests
+test:
+	$(GO) test -v ./...
+
+# Format code
+fmt:
+	$(GO) fmt ./...
+
+# Lint code (requires golangci-lint)
+lint:
+	golangci-lint run
+
+# Build for multiple platforms
+build-all: build-darwin build-linux build-windows
+	cd $(BUILD_DIR) && shasum -a 256 $(BINARY_NAME)-* > checksums.txt
+
+build-darwin:
+	GOOS=darwin GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 ./cmd/antigravity-sync
+	GOOS=darwin GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 ./cmd/antigravity-sync
+
+build-linux:
+	GOOS=linux GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/antigravity-sync
+	GOOS=linux GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/antigravity-sync
+
+build-windows:
+	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/antigravity-sync
+	GOOS=windows GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-arm64.exe ./cmd/antigravity-sync
+
+# Development: build and run
+run: build
+	./$(BUILD_DIR)/$(BINARY_NAME)
+
+# Download dependencies
+deps:
+	$(GO) mod download
+	$(GO) mod tidy
+
+# Dry run semantic-release (requires npm packages)
+release-dry-run:
+	npx semantic-release --dry-run
+
+# Setup git hooks
+setup-hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed. Pre-commit will run tests and lint."
+
+# Run all checks (same as pre-commit)
+check:
+	@echo "Checking formatting..."
+	@test -z "$$(gofmt -l .)" || (echo "Run 'make fmt' to fix formatting" && exit 1)
+	@echo "Running go vet..."
+	$(GO) vet ./...
+	@echo "Running tests..."
+	$(GO) test ./... -short
+	@echo "All checks passed!"

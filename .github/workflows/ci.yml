@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run all tests
+        run: go test -v ./...
+
+      - name: Run coverage on library packages
+        run: |
+          go test -coverprofile=coverage.out -covermode=atomic \
+            ./internal/claudesettings/ \
+            ./internal/config/ \
+            ./internal/crypto/ \
+            ./internal/paths/ \
+            ./internal/storage/ \
+            ./internal/sync/ \
+            ./internal/util/
+
+      - name: Display coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | sed 's/%//')
+          echo "Coverage: ${COVERAGE}%"
+          THRESHOLD=60
+          if [ "$(echo "$COVERAGE < $THRESHOLD" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
+            exit 1
+          fi
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: coverage.out
+
+      - name: Build
+        run: go build ./...
+
+      # The npm installer is the primary distribution path but has no Go
+      # coverage. Its redirect allowlist broke silently once already.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test npm installer
+        run: node --test
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted. Run 'make fmt':"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
