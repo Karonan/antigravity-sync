@@ -1464,9 +1464,18 @@ Examples:
 				return fmt.Errorf("go is not installed: install Go 1.24+ from https://go.dev/dl/, or run 'go install %s' on a machine that has it", installPackage)
 			}
 
+			// The public module proxy caches what @main points to for a while after a
+			// push; fetching from GitHub directly needs git, so fall back to the proxy.
+			env := os.Environ()
+			if _, err := exec.LookPath("git"); err == nil {
+				env = append(env, "GOPROXY=direct")
+			}
+
 			fmt.Printf("%s⋯%s Checking for updates...\n", colorDim, colorReset)
 			module, _, _ := strings.Cut(installPackage, "/cmd/")
-			out, err := exec.Command(goBin, "list", "-m", "-f", "{{.Version}}", module+"@main").Output()
+			list := exec.Command(goBin, "list", "-m", "-f", "{{.Version}}", module+"@main")
+			list.Env = env
+			out, err := list.Output()
 			if err != nil {
 				return fmt.Errorf("failed to check for updates: %w", err)
 			}
@@ -1492,8 +1501,10 @@ Examples:
 			defer func() { _ = os.RemoveAll(tmpDir) }()
 
 			fmt.Printf("%s⋯%s Building %s...\n", colorDim, colorReset, latest)
-			build := exec.Command(goBin, "install", installPackage)
-			build.Env = append(os.Environ(), "GOBIN="+tmpDir)
+			// Install the exact version just checked, so a push in between can't change it
+			pkg, _, _ := strings.Cut(installPackage, "@")
+			build := exec.Command(goBin, "install", pkg+"@"+latest)
+			build.Env = append(env, "GOBIN="+tmpDir)
 			build.Stdout, build.Stderr = os.Stdout, os.Stderr
 			if err := build.Run(); err != nil {
 				return fmt.Errorf("go install failed: %w", err)
