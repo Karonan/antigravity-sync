@@ -457,7 +457,7 @@ func TestConflictResolution(t *testing.T) {
 // Helper functions
 
 func getTestPassphrase() string {
-	if p := os.Getenv("CLAUDE_SYNC_TEST_PASSPHRASE"); p != "" {
+	if p := os.Getenv("ANTIGRAVITY_SYNC_TEST_PASSPHRASE"); p != "" {
 		return p
 	}
 	return "test-passphrase-123"
@@ -466,10 +466,10 @@ func getTestPassphrase() string {
 func getTestStorageConfig() *storage.StorageConfig {
 	return &storage.StorageConfig{
 		Provider:        storage.ProviderR2,
-		Bucket:          getEnvOrDefault("CLAUDE_SYNC_R2_BUCKET", "claude-sync-test"),
-		AccountID:       os.Getenv("CLAUDE_SYNC_R2_ACCOUNT_ID"),
-		AccessKeyID:     os.Getenv("CLAUDE_SYNC_R2_ACCESS_KEY_ID"),
-		SecretAccessKey: os.Getenv("CLAUDE_SYNC_R2_SECRET_ACCESS_KEY"),
+		Bucket:          getEnvOrDefault("ANTIGRAVITY_SYNC_R2_BUCKET", "antigravity-sync-test"),
+		AccountID:       os.Getenv("ANTIGRAVITY_SYNC_R2_ACCOUNT_ID"),
+		AccessKeyID:     os.Getenv("ANTIGRAVITY_SYNC_R2_ACCESS_KEY_ID"),
+		SecretAccessKey: os.Getenv("ANTIGRAVITY_SYNC_R2_SECRET_ACCESS_KEY"),
 	}
 }
 
@@ -484,9 +484,9 @@ func setupTestConfig(t *testing.T, baseDir, passphrase string) *config.Config {
 	t.Helper()
 
 	// Verify R2 credentials are available
-	accountID := os.Getenv("CLAUDE_SYNC_R2_ACCOUNT_ID")
-	accessKeyID := os.Getenv("CLAUDE_SYNC_R2_ACCESS_KEY_ID")
-	secretAccessKey := os.Getenv("CLAUDE_SYNC_R2_SECRET_ACCESS_KEY")
+	accountID := os.Getenv("ANTIGRAVITY_SYNC_R2_ACCOUNT_ID")
+	accessKeyID := os.Getenv("ANTIGRAVITY_SYNC_R2_ACCESS_KEY_ID")
+	secretAccessKey := os.Getenv("ANTIGRAVITY_SYNC_R2_SECRET_ACCESS_KEY")
 
 	if accountID == "" || accessKeyID == "" || secretAccessKey == "" {
 		t.Skip("R2 credentials not set - skipping integration test")
@@ -510,7 +510,7 @@ func setupTestConfig(t *testing.T, baseDir, passphrase string) *config.Config {
 
 	storageCfg := &storage.StorageConfig{
 		Provider:        storage.ProviderR2,
-		Bucket:          getEnvOrDefault("CLAUDE_SYNC_R2_BUCKET", "claude-sync-test"),
+		Bucket:          getEnvOrDefault("ANTIGRAVITY_SYNC_R2_BUCKET", "antigravity-sync-test"),
 		AccountID:       accountID,
 		AccessKeyID:     accessKeyID,
 		SecretAccessKey: secretAccessKey,
@@ -552,7 +552,7 @@ func cleanupRemote(t *testing.T, baseDir string) {
 }
 
 // verifyKeyMatchesRemote is duplicated here for testing
-// In production, this is in cmd/claude-sync/main.go
+// In production, this is in cmd/antigravity-sync/main.go
 func verifyKeyMatchesRemote(ctx context.Context, store storage.Storage, keyPath string) error {
 	objects, err := store.List(ctx, "")
 	if err != nil || len(objects) == 0 {

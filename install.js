@@ -244,12 +244,12 @@ function hashFile(filePath) {
 // --no-optional, or a platform we have not packaged. Both paths write to the
 // same place bin/antigravity-sync.js looks, so either satisfies the wrapper.
 const PLATFORM_PACKAGES = {
-  "darwin-arm64": "@tawandotorg/antigravity-sync-darwin-arm64",
-  "darwin-x64": "@tawandotorg/antigravity-sync-darwin-x64",
-  "linux-arm64": "@tawandotorg/antigravity-sync-linux-arm64",
-  "linux-x64": "@tawandotorg/antigravity-sync-linux-x64",
-  "win32-arm64": "@tawandotorg/antigravity-sync-win32-arm64",
-  "win32-x64": "@tawandotorg/antigravity-sync-win32-x64",
+  "darwin-arm64": "@karonan/antigravity-sync-darwin-arm64",
+  "darwin-x64": "@karonan/antigravity-sync-darwin-x64",
+  "linux-arm64": "@karonan/antigravity-sync-linux-arm64",
+  "linux-x64": "@karonan/antigravity-sync-linux-x64",
+  "win32-arm64": "@karonan/antigravity-sync-win32-arm64",
+  "win32-x64": "@karonan/antigravity-sync-win32-x64",
 };
 
 // platformPackageBinary returns the path to a binary already provided by the

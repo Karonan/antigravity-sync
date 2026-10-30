@@ -1,5 +1,5 @@
 {
-  "name": "@tawandotorg/antigravity-sync",
+  "name": "@karonan/antigravity-sync",
   "version": "0.1.0",
   "description": "Sync Google Antigravity conversations, projects, and skills across devices with encrypted cloud storage",
   "bin": {
@@ -26,7 +26,7 @@
     "encryption",
     "age"
   ],
-  "author": "tawanorg",
+  "author": "Karonan",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -40,11 +40,11 @@
     "node": ">=14"
   },
   "optionalDependencies": {
-    "@tawandotorg/antigravity-sync-darwin-arm64": "0.1.0",
-    "@tawandotorg/antigravity-sync-darwin-x64": "0.1.0",
-    "@tawandotorg/antigravity-sync-linux-arm64": "0.1.0",
-    "@tawandotorg/antigravity-sync-linux-x64": "0.1.0",
-    "@tawandotorg/antigravity-sync-win32-arm64": "0.1.0",
-    "@tawandotorg/antigravity-sync-win32-x64": "0.1.0"
+    "@karonan/antigravity-sync-darwin-arm64": "0.1.0",
+    "@karonan/antigravity-sync-darwin-x64": "0.1.0",
+    "@karonan/antigravity-sync-linux-arm64": "0.1.0",
+    "@karonan/antigravity-sync-linux-x64": "0.1.0",
+    "@karonan/antigravity-sync-win32-arm64": "0.1.0",
+    "@karonan/antigravity-sync-win32-x64": "0.1.0"
   }
 }

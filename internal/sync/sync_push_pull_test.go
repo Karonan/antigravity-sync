@@ -131,7 +131,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 	tmpDir := t.TempDir()
 	claudeDir := filepath.Join(tmpDir, ".claude")
-	stateDir := filepath.Join(tmpDir, ".claude-sync")
+	stateDir := filepath.Join(tmpDir, ".antigravity-sync")
 
 	if err := os.MkdirAll(claudeDir, 0755); err != nil {
 		t.Fatalf("Failed to create claude dir: %v", err)
@@ -460,7 +460,7 @@ func TestPushThenPullRoundTrip(t *testing.T) {
 
 	// Device A setup
 	deviceADir := filepath.Join(tmpDir, "deviceA", ".claude")
-	deviceAStateDir := filepath.Join(tmpDir, "deviceA", ".claude-sync")
+	deviceAStateDir := filepath.Join(tmpDir, "deviceA", ".antigravity-sync")
 	if err := os.MkdirAll(deviceADir, 0755); err != nil {
 		t.Fatalf("Failed to create deviceA claude dir: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestPushThenPullRoundTrip(t *testing.T) {
 
 	// Device B setup (fresh, no local files)
 	deviceBDir := filepath.Join(tmpDir, "deviceB", ".claude")
-	deviceBStateDir := filepath.Join(tmpDir, "deviceB", ".claude-sync")
+	deviceBStateDir := filepath.Join(tmpDir, "deviceB", ".antigravity-sync")
 	if err := os.MkdirAll(deviceBDir, 0755); err != nil {
 		t.Fatalf("Failed to create deviceB claude dir: %v", err)
 	}

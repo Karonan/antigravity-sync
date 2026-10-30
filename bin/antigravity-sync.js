@@ -5,12 +5,12 @@ const path = require("path");
 const fs = require("fs");
 
 const PLATFORM_PACKAGES = {
-  "darwin-arm64": "@tawandotorg/antigravity-sync-darwin-arm64",
-  "darwin-x64": "@tawandotorg/antigravity-sync-darwin-x64",
-  "linux-arm64": "@tawandotorg/antigravity-sync-linux-arm64",
-  "linux-x64": "@tawandotorg/antigravity-sync-linux-x64",
-  "win32-arm64": "@tawandotorg/antigravity-sync-win32-arm64",
-  "win32-x64": "@tawandotorg/antigravity-sync-win32-x64",
+  "darwin-arm64": "@karonan/antigravity-sync-darwin-arm64",
+  "darwin-x64": "@karonan/antigravity-sync-darwin-x64",
+  "linux-arm64": "@karonan/antigravity-sync-linux-arm64",
+  "linux-x64": "@karonan/antigravity-sync-linux-x64",
+  "win32-arm64": "@karonan/antigravity-sync-win32-arm64",
+  "win32-x64": "@karonan/antigravity-sync-win32-x64",
 };
 
 function getBinaryPath() {
@@ -44,7 +44,7 @@ function getBinaryPath() {
 
   console.error(`Error: antigravity-sync binary not found for ${platformKey}.`);
   console.error(`The platform package ${packageName} may not be installed.`);
-  console.error("Try reinstalling: npm install -g @tawandotorg/antigravity-sync");
+  console.error("Try reinstalling: npm install -g @karonan/antigravity-sync");
   process.exit(1);
 }
 
@@ -57,7 +57,7 @@ const child = spawn(binary, args, {
 });
 
 child.on("error", (err) => {
-  console.error(`Failed to start claude-sync: ${err.message}`);
+  console.error(`Failed to start antigravity-sync: ${err.message}`);
   process.exit(1);
 });
 

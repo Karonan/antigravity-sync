@@ -275,7 +275,7 @@ func (c *Config) IsLegacyConfig() bool {
 // bundles node_modules and .venv). Under "full" scope the custom list wins
 // outright, since there is nothing narrower to protect.
 //
-// This matters because `claude-sync paths add|remove` materializes the entire
+// This matters because `antigravity-sync paths add|remove` materializes the entire
 // default path list into SyncPaths, so most configs carrying a sync_paths block
 // never explicitly opted into one.
 //

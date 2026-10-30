@@ -1,5 +1,5 @@
 {
-  "name": "@tawandotorg/antigravity-sync-linux-x64",
+  "name": "@karonan/antigravity-sync-linux-x64",
   "version": "0.4.0",
   "description": "antigravity-sync binary for Linux x64",
   "os": ["linux"],

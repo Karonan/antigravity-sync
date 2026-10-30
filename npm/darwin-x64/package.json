@@ -1,5 +1,5 @@
 {
-  "name": "@tawandotorg/antigravity-sync-darwin-x64",
+  "name": "@karonan/antigravity-sync-darwin-x64",
   "version": "0.4.0",
   "description": "antigravity-sync binary for macOS x64",
   "os": ["darwin"],

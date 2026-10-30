@@ -1,5 +1,5 @@
 {
-  "name": "@tawandotorg/antigravity-sync-win32-arm64",
+  "name": "@karonan/antigravity-sync-win32-arm64",
   "version": "0.4.0",
   "description": "antigravity-sync binary for Windows ARM64",
   "os": ["win32"],

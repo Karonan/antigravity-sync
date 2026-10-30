@@ -6,9 +6,9 @@ cmd/
 internal/
 
 # Build artifacts
-bin/claude-sync
-bin/claude-sync.exe
-bin/claude-sync-*
+bin/antigravity-sync
+bin/antigravity-sync.exe
+bin/antigravity-sync-*
 
 # Development
 .git/
@@ -30,7 +30,7 @@ docs/
 testdata/
 
 # Keep these
-!bin/claude-sync.js
+!bin/antigravity-sync.js
 !install.js
 !package.json
 !README.md

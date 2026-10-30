@@ -16,13 +16,13 @@ This simulates two separate devices with isolated filesystems:
 
 ```bash
 # Set environment variables
-export CLAUDE_SYNC_R2_ACCOUNT_ID=your_account_id
-export CLAUDE_SYNC_R2_ACCESS_KEY_ID=your_access_key
-export CLAUDE_SYNC_R2_SECRET_ACCESS_KEY=your_secret_key
-export CLAUDE_SYNC_R2_BUCKET=claude-sync-test
+export ANTIGRAVITY_SYNC_R2_ACCOUNT_ID=your_account_id
+export ANTIGRAVITY_SYNC_R2_ACCESS_KEY_ID=your_access_key
+export ANTIGRAVITY_SYNC_R2_SECRET_ACCESS_KEY=your_secret_key
+export ANTIGRAVITY_SYNC_R2_BUCKET=antigravity-sync-test
 
 # Optional: custom passphrase (default: test-passphrase-123)
-export CLAUDE_SYNC_TEST_PASSPHRASE=your-test-passphrase
+export ANTIGRAVITY_SYNC_TEST_PASSPHRASE=your-test-passphrase
 
 # Run tests
 cd integration
@@ -34,10 +34,10 @@ docker-compose up --build
 Run Go integration tests directly (requires R2 credentials):
 
 ```bash
-export CLAUDE_SYNC_R2_ACCOUNT_ID=xxx
-export CLAUDE_SYNC_R2_ACCESS_KEY_ID=xxx
-export CLAUDE_SYNC_R2_SECRET_ACCESS_KEY=xxx
-export CLAUDE_SYNC_R2_BUCKET=claude-sync-test
+export ANTIGRAVITY_SYNC_R2_ACCOUNT_ID=xxx
+export ANTIGRAVITY_SYNC_R2_ACCESS_KEY_ID=xxx
+export ANTIGRAVITY_SYNC_R2_SECRET_ACCESS_KEY=xxx
+export ANTIGRAVITY_SYNC_R2_BUCKET=antigravity-sync-test
 
 go test -v -tags=integration ./integration/...
 ```
@@ -71,11 +71,11 @@ go test -v -tags=integration ./integration/...
 Tests automatically clean up the remote bucket after completion. If tests fail mid-execution, manually clear the test bucket:
 
 ```bash
-# Using claude-sync
-claude-sync reset --remote --force
+# Using antigravity-sync
+antigravity-sync reset --remote --force
 
 # Or using AWS CLI with R2 endpoint
-aws s3 rm s3://claude-sync-test --recursive \
+aws s3 rm s3://antigravity-sync-test --recursive \
   --endpoint-url https://<account_id>.r2.cloudflarestorage.com
 ```
 
@@ -85,8 +85,8 @@ For GitHub Actions, store R2 credentials as secrets:
 
 ```yaml
 env:
-  CLAUDE_SYNC_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-  CLAUDE_SYNC_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  CLAUDE_SYNC_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  CLAUDE_SYNC_R2_BUCKET: claude-sync-ci-test
+  ANTIGRAVITY_SYNC_R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+  ANTIGRAVITY_SYNC_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  ANTIGRAVITY_SYNC_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  ANTIGRAVITY_SYNC_R2_BUCKET: antigravity-sync-ci-test
 ```

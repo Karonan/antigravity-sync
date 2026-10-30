@@ -5,7 +5,7 @@
 *Encrypted with [age](https://github.com/FiloSottile/age) • Cloudflare R2 (10GB Free Tier)*
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![npm](https://img.shields.io/npm/v/@Karonan/antigravity-sync)](https://www.npmjs.com/package/@tawandotorg/antigravity-sync)
+[![npm](https://img.shields.io/npm/v/@karonan/antigravity-sync)](https://www.npmjs.com/package/@karonan/antigravity-sync)
 
 [Quick Start](#quick-start) • [Setup Guide](#setup-guide) • [What Gets Synced](#what-gets-synced) • [Commands](#commands) • [Architecture](#architecture)
 
@@ -34,7 +34,7 @@
 
 ```bash
 # Install globally
-npm install -g @Karonan/antigravity-sync
+npm install -g @karonan/antigravity-sync
 
 # Run setup wizard
 antigravity-sync init
@@ -47,7 +47,7 @@ antigravity-sync push
 
 ```bash
 # Install globally
-npm install -g @Karonan/antigravity-sync
+npm install -g @karonan/antigravity-sync
 
 # Run setup wizard with SAME credentials and passphrase
 antigravity-sync init
@@ -103,4 +103,4 @@ antigravity-sync pull
 
 ## License
 
-MIT © [tawanorg](https://github.com/tawanorg)
+MIT, see [LICENSE](LICENSE).

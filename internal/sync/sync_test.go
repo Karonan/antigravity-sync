@@ -15,7 +15,7 @@ func TestFullWorkflowWithLocalState(t *testing.T) {
 	// Set up temporary directories
 	tmpDir := t.TempDir()
 	claudeDir := filepath.Join(tmpDir, ".claude")
-	configDir := filepath.Join(tmpDir, ".claude-sync")
+	configDir := filepath.Join(tmpDir, ".antigravity-sync")
 
 	if err := os.MkdirAll(claudeDir, 0755); err != nil {
 		t.Fatalf("Failed to create claude dir: %v", err)

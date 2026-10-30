@@ -2105,7 +2105,7 @@ Examples:
 
 			// Header
 			fmt.Printf("%s╭─────────────────────────────────────────────────────────────╮%s\n", colorCyan, colorReset)
-			fmt.Printf("%s│%s  %sCLAUDE-SYNC CHANGELOG%s                                      %s│%s\n", colorCyan, colorReset, colorBold, colorReset, colorCyan, colorReset)
+			fmt.Printf("%s│%s  %sANTIGRAVITY-SYNC CHANGELOG%s                                 %s│%s\n", colorCyan, colorReset, colorBold, colorReset, colorCyan, colorReset)
 			fmt.Printf("%s╰─────────────────────────────────────────────────────────────╯%s\n\n", colorCyan, colorReset)
 
 			currentVersion := strings.TrimPrefix(version, "v")
