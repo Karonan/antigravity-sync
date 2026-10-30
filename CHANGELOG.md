@@ -1,3 +1,10 @@
+# 1.0.0 (2026-10-30)
+
+
+### Features
+
+* antigravity-sync, adapted from claude-sync v1.17.2 ([2c6b93b](https://github.com/Karonan/antigravity-sync/commit/2c6b93bca3f2a622c72c9161a8b7347f1ead428f))
+
 ## [1.17.2](https://github.com/tawanorg/claude-sync/compare/v1.17.1...v1.17.2) (2026-10-06)
 
 
