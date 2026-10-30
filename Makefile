@@ -1,4 +1,4 @@
-.PHONY: build install clean test fmt lint release-dry-run setup-hooks check
+.PHONY: build install clean test fmt lint setup-hooks check
 
 BINARY_NAME=antigravity-sync
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -59,10 +59,6 @@ run: build
 deps:
 	$(GO) mod download
 	$(GO) mod tidy
-
-# Dry run semantic-release (needs Node.js for npx)
-release-dry-run:
-	npx semantic-release --dry-run
 
 # Setup git hooks
 setup-hooks:

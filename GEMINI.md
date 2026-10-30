@@ -4,7 +4,7 @@ This file provides architectural guidance and reference for Antigravity when wor
 
 ## Repository Purpose
 
-`antigravity-sync` is a Go CLI that syncs `~/.gemini/` (Antigravity conversations, summaries, artifacts, project definitions, custom skills, and configs) across devices via encrypted cloud storage with Cloudflare R2 (10 GB free tier, zero egress fees). Files are gzip-compressed, then age-encrypted before upload. Pre-built binaries for each platform are attached to GitHub Releases, which `antigravity-sync update` downloads from.
+`antigravity-sync` is a Go CLI that syncs `~/.gemini/` (Antigravity conversations, summaries, artifacts, project definitions, custom skills, and configs) across devices via encrypted cloud storage with Cloudflare R2 (10 GB free tier, zero egress fees). Files are gzip-compressed, then age-encrypted before upload. There are no prebuilt releases: it is installed with `go install ...@main`, and `antigravity-sync update` does the same and swaps the running binary in place.
 
 ## Common Commands
 
@@ -19,7 +19,7 @@ make build-all        # cross-compile darwin/linux/windows arm64/amd64 into ./bi
 
 Layered with a pluggable storage abstraction:
 
-- **CLI layer** — `cmd/antigravity-sync/main.go`. Cobra commands (`init`, `push`, `pull`, `status`, `diff`, `conflicts`, `reset`, `update`, `changelog`, `mcp`, `paths`) plus Survey-driven interactive wizards.
+- **CLI layer** — `cmd/antigravity-sync/main.go`. Cobra commands (`init`, `push`, `pull`, `status`, `diff`, `conflicts`, `reset`, `update`, `mcp`, `paths`) plus Survey-driven interactive wizards.
 - **Sync layer** — `internal/sync/`. `Syncer` orchestrates push/pull; `SyncState` (`state.json`) tracks per-file SHA256 hash + size + mtime + last-uploaded time. `DetectChanges` compares local files against state to produce `add/modify/delete` work items.
 - **Crypto layer** — `internal/crypto/encrypt.go`. Wraps `filippo.io/age` (X25519 + ChaCha20-Poly1305). Supports two key modes: random (`GenerateKey`) or passphrase-derived (`GenerateKeyFromPassphrase`, Argon2id with a **fixed salt** `sha256("antigravity-sync-v1")` so the same passphrase yields the same key on any device).
 - **Storage layer** — `internal/storage/`. `Storage` interface (`Upload`/`Download`/`Delete`/`DeleteBatch`/`List`/`Head`/`BucketExists`) implemented for Cloudflare R2 via AWS SDK v2 (`r2.go`).

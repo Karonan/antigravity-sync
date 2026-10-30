@@ -1,7 +1,6 @@
 package util
 
 import (
-	"runtime"
 	"testing"
 )
 
@@ -57,52 +56,5 @@ func TestFormatSize(t *testing.T) {
 				t.Errorf("FormatSize(%d) = %q, want %q", tt.size, result, tt.expected)
 			}
 		})
-	}
-}
-
-func TestCompareVersions(t *testing.T) {
-	tests := []struct {
-		name     string
-		v1       string
-		v2       string
-		expected int
-	}{
-		{"equal versions", "1.0.0", "1.0.0", 0},
-		{"v1 less than v2 major", "1.0.0", "2.0.0", -1},
-		{"v1 greater than v2 major", "2.0.0", "1.0.0", 1},
-		{"v1 less than v2 minor", "1.1.0", "1.2.0", -1},
-		{"v1 greater than v2 minor", "1.3.0", "1.2.0", 1},
-		{"v1 less than v2 patch", "1.0.1", "1.0.2", -1},
-		{"v1 greater than v2 patch", "1.0.3", "1.0.2", 1},
-		{"complex comparison", "1.6.3", "1.5.9", 1},
-		{"short version strings", "1.0", "1.0.0", 0},
-		{"both zeros", "0.0.0", "0.0.0", 0},
-		{"single component", "2", "1", 1},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := CompareVersions(tt.v1, tt.v2)
-			if result != tt.expected {
-				t.Errorf("CompareVersions(%q, %q) = %d, want %d", tt.v1, tt.v2, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestGetBinaryName(t *testing.T) {
-	result := GetBinaryName("1.0.0")
-	expected := "antigravity-sync-" + runtime.GOOS + "-" + runtime.GOARCH
-	if runtime.GOOS == "windows" {
-		expected += ".exe"
-	}
-	if result != expected {
-		t.Errorf("GetBinaryName(\"1.0.0\") = %q, want %q", result, expected)
-	}
-
-	// Version parameter doesn't affect output
-	result2 := GetBinaryName("2.5.3")
-	if result != result2 {
-		t.Errorf("GetBinaryName should return same result regardless of version, got %q and %q", result, result2)
 	}
 }

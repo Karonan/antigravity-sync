@@ -3,16 +3,12 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -49,10 +45,15 @@ func main() {
 		Aliases: []string{"agy-sync"},
 		Short:   "Sync Google Antigravity conversations, projects, and skills across devices",
 		Long:    `A CLI tool to sync your ~/.gemini directory (conversations, project definitions, custom skills, and settings) across devices using encrypted cloud storage.`,
-		Version: version,
+		Version: currentVersion(),
 	}
 
 	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress output")
+
+	// Windows can't delete a running binary, so update leaves the previous one as .old
+	if exe, err := os.Executable(); err == nil {
+		_ = os.Remove(exe + ".old")
+	}
 
 	rootCmd.AddCommand(
 		initCmd(),
@@ -64,7 +65,6 @@ func main() {
 		resetCmd(),
 		migrateCmd(),
 		updateCmd(),
-		changelogCmd(),
 		mcpCmd(),
 		pathsCmd(),
 	)
@@ -76,7 +76,7 @@ func main() {
 
 func printBanner() {
 	fmt.Println()
-	fmt.Printf("  %sWelcome to Antigravity Sync!%s %sv%s%s\n", colorBold, colorReset, colorDim, version, colorReset)
+	fmt.Printf("  %sWelcome to Antigravity Sync!%s %s%s%s\n", colorBold, colorReset, colorDim, currentVersion(), colorReset)
 	fmt.Println()
 
 	// Block-style ASCII art - ANTIGRAVITY SYNC
@@ -1430,14 +1430,20 @@ device's migrate run and reported as "left for other devices".`,
 	return cmd
 }
 
-// GitHubRelease represents a GitHub release from the API
-type GitHubRelease struct {
-	TagName string `json:"tag_name"`
-	Name    string `json:"name"`
-	Assets  []struct {
-		Name               string `json:"name"`
-		BrowserDownloadURL string `json:"browser_download_url"`
-	} `json:"assets"`
+// installPackage is what `update` builds. @main, not @latest: @latest would
+// pick the highest version tag instead of the newest commit.
+const installPackage = "github.com/Karonan/antigravity-sync/cmd/antigravity-sync@main"
+
+// currentVersion is the ldflags version for `make build`, else the module
+// version Go records for `go install` builds (a pseudo-version naming the commit).
+func currentVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
 }
 
 func updateCmd() *cobra.Command {
@@ -1445,73 +1451,63 @@ func updateCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update antigravity-sync to the latest version",
-		Long: `Check for updates and automatically download the latest version.
+		Short: "Rebuild antigravity-sync from the latest commit on main",
+		Long: `Build the newest commit on main with 'go install' and replace this binary with it.
+Requires Go 1.24+ (https://go.dev/dl/).
 
 Examples:
-  antigravity-sync update          # Update to latest version
-  antigravity-sync update --check  # Only check for updates, don't install`,
+  antigravity-sync update          # Update to the latest commit
+  antigravity-sync update --check  # Only check whether an update exists`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("%s⋯%s Checking for updates...\n", colorDim, colorReset)
+			goBin, err := exec.LookPath("go")
+			if err != nil {
+				return fmt.Errorf("go is not installed: install Go 1.24+ from https://go.dev/dl/, or run 'go install %s' on a machine that has it", installPackage)
+			}
 
-			// Get latest release from GitHub
-			release, err := getLatestRelease()
+			fmt.Printf("%s⋯%s Checking for updates...\n", colorDim, colorReset)
+			module, _, _ := strings.Cut(installPackage, "/cmd/")
+			out, err := exec.Command(goBin, "list", "-m", "-f", "{{.Version}}", module+"@main").Output()
 			if err != nil {
 				return fmt.Errorf("failed to check for updates: %w", err)
 			}
-
-			latestVersion := strings.TrimPrefix(release.TagName, "v")
-			currentVersion := strings.TrimPrefix(version, "v")
-
-			if latestVersion == currentVersion {
-				fmt.Printf("%s✓%s Already up to date (v%s)\n", colorGreen, colorReset, currentVersion)
+			latest := strings.TrimSpace(string(out))
+			current := currentVersion()
+			if latest == current {
+				fmt.Printf("%s✓%s Already up to date (%s)\n", colorGreen, colorReset, current)
 				return nil
 			}
-
-			// Compare versions (simple string comparison works for semver)
-			if util.CompareVersions(currentVersion, latestVersion) >= 0 {
-				fmt.Printf("%s✓%s Already up to date (v%s)\n", colorGreen, colorReset, currentVersion)
-				return nil
-			}
-
-			fmt.Printf("%s↑%s New version available: %sv%s%s → %sv%s%s\n",
-				colorCyan, colorReset,
-				colorDim, currentVersion, colorReset,
-				colorGreen, latestVersion, colorReset)
-
+			fmt.Printf("%s↑%s Update available: %s%s%s → %s%s%s\n",
+				colorCyan, colorReset, colorDim, current, colorReset, colorGreen, latest, colorReset)
 			if checkOnly {
 				fmt.Printf("\n%sRun 'antigravity-sync update' to install%s\n", colorDim, colorReset)
 				return nil
 			}
 
-			// Find the right asset for this OS/arch
-			assetName := util.GetBinaryName(latestVersion)
-			var downloadURL string
-			for _, asset := range release.Assets {
-				if asset.Name == assetName {
-					downloadURL = asset.BrowserDownloadURL
-					break
-				}
-			}
-
-			if downloadURL == "" {
-				return fmt.Errorf("no binary available for %s/%s", runtime.GOOS, runtime.GOARCH)
-			}
-
-			fmt.Printf("%s⋯%s Downloading %s...\n", colorDim, colorReset, assetName)
-
-			// Download the new binary
-			newBinary, err := downloadBinary(downloadURL)
+			// Build into a temp dir, then swap it in place: go install alone would only
+			// update GOBIN, which may not be where this binary lives.
+			tmpDir, err := os.MkdirTemp("", "antigravity-sync-update-")
 			if err != nil {
-				return fmt.Errorf("failed to download update: %w", err)
+				return err
+			}
+			defer func() { _ = os.RemoveAll(tmpDir) }()
+
+			fmt.Printf("%s⋯%s Building %s...\n", colorDim, colorReset, latest)
+			build := exec.Command(goBin, "install", installPackage)
+			build.Env = append(os.Environ(), "GOBIN="+tmpDir)
+			build.Stdout, build.Stderr = os.Stdout, os.Stderr
+			if err := build.Run(); err != nil {
+				return fmt.Errorf("go install failed: %w", err)
 			}
 
-			// Verify against the release's published checksums
-			if err := verifyChecksum(release, assetName, newBinary); err != nil {
-				return fmt.Errorf("refusing to install update: %w", err)
+			name := "antigravity-sync"
+			if runtime.GOOS == "windows" {
+				name += ".exe"
+			}
+			newBinary, err := os.ReadFile(filepath.Join(tmpDir, name))
+			if err != nil {
+				return fmt.Errorf("built binary not found: %w", err)
 			}
 
-			// Get current executable path
 			execPath, err := os.Executable()
 			if err != nil {
 				return fmt.Errorf("failed to get executable path: %w", err)
@@ -1521,15 +1517,12 @@ Examples:
 				return fmt.Errorf("failed to resolve executable path: %w", err)
 			}
 
-			// Replace the current binary
 			fmt.Printf("%s⋯%s Installing update...\n", colorDim, colorReset)
 			if err := replaceBinary(execPath, newBinary); err != nil {
 				return fmt.Errorf("failed to install update: %w", err)
 			}
 
-			fmt.Printf("%s✓%s Updated to v%s\n", colorGreen, colorReset, latestVersion)
-			fmt.Printf("\n%sRestart antigravity-sync to use the new version%s\n", colorDim, colorReset)
-
+			fmt.Printf("%s✓%s Updated to %s\n", colorGreen, colorReset, latest)
 			return nil
 		},
 	}
@@ -1537,111 +1530,6 @@ Examples:
 	cmd.Flags().BoolVar(&checkOnly, "check", false, "Only check for updates, don't install")
 
 	return cmd
-}
-
-func getLatestRelease() (*GitHubRelease, error) {
-	url := "https://api.github.com/repos/Karonan/antigravity-sync/releases/latest"
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "antigravity-sync/"+version)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	var release GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, err
-	}
-
-	return &release, nil
-}
-
-// verifyChecksum validates the downloaded binary against the checksums.txt
-// asset published with the release. Releases predating checksum publication
-// warn instead of failing; once checksums.txt is present, a missing entry or
-// a mismatch aborts the update.
-func verifyChecksum(release *GitHubRelease, assetName string, data []byte) error {
-	var checksumsURL string
-	for _, asset := range release.Assets {
-		if asset.Name == "checksums.txt" {
-			checksumsURL = asset.BrowserDownloadURL
-			break
-		}
-	}
-	if checksumsURL == "" {
-		fmt.Printf("%s!%s Release has no checksums.txt; skipping integrity verification\n", colorYellow, colorReset)
-		return nil
-	}
-
-	body, err := downloadBinary(checksumsURL)
-	if err != nil {
-		return fmt.Errorf("failed to download checksums.txt: %w", err)
-	}
-
-	return verifyChecksumContent(string(body), assetName, data)
-}
-
-func verifyChecksumContent(content, assetName string, data []byte) error {
-	sum := sha256.Sum256(data)
-	got := hex.EncodeToString(sum[:])
-
-	for _, line := range strings.Split(content, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 2 {
-			continue
-		}
-		// sha256sum format: "<hash>  <filename>" ("*" prefix = binary mode)
-		if strings.TrimPrefix(fields[1], "*") != assetName {
-			continue
-		}
-		if !strings.EqualFold(fields[0], got) {
-			return fmt.Errorf("sha256 mismatch for %s: release lists %s, downloaded %s", assetName, fields[0], got)
-		}
-		fmt.Printf("%s✓%s Checksum verified\n", colorGreen, colorReset)
-		return nil
-	}
-	return fmt.Errorf("checksums.txt has no entry for %s", assetName)
-}
-
-// maxBinarySize is the maximum allowed size for update binary downloads (200MB).
-// This prevents downloading excessively large files during update.
-const maxBinarySize = 200 * 1024 * 1024
-
-func downloadBinary(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download failed with status %d", resp.StatusCode)
-	}
-
-	// Limit download size to prevent downloading excessively large files
-	limited := io.LimitReader(resp.Body, maxBinarySize+1)
-	data, err := io.ReadAll(limited)
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > maxBinarySize {
-		return nil, fmt.Errorf("binary exceeds maximum size of %d bytes", maxBinarySize)
-	}
-
-	return data, nil
 }
 
 func replaceBinary(execPath string, newBinary []byte) error {
@@ -2077,151 +1965,6 @@ func executePull(ctx context.Context, syncer *sync.Syncer) error {
 	}
 
 	return nil
-}
-
-func changelogCmd() *cobra.Command {
-	var limit int
-
-	cmd := &cobra.Command{
-		Use:   "changelog",
-		Short: "Show release history and changelog",
-		Long: `Display the release history of antigravity-sync with version notes.
-
-Examples:
-  antigravity-sync changelog          # Show recent releases
-  antigravity-sync changelog --limit 5 # Show last 5 releases`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("%s⋯%s Fetching releases...\n\n", colorDim, colorReset)
-
-			releases, err := getAllReleases(limit)
-			if err != nil {
-				return fmt.Errorf("failed to fetch changelog: %w", err)
-			}
-
-			if len(releases) == 0 {
-				fmt.Printf("%sNo releases found.%s\n", colorDim, colorReset)
-				return nil
-			}
-
-			// Header
-			fmt.Printf("%s╭─────────────────────────────────────────────────────────────╮%s\n", colorCyan, colorReset)
-			fmt.Printf("%s│%s  %sANTIGRAVITY-SYNC CHANGELOG%s                                 %s│%s\n", colorCyan, colorReset, colorBold, colorReset, colorCyan, colorReset)
-			fmt.Printf("%s╰─────────────────────────────────────────────────────────────╯%s\n\n", colorCyan, colorReset)
-
-			currentVersion := strings.TrimPrefix(version, "v")
-
-			for i, release := range releases {
-				tagVersion := strings.TrimPrefix(release.TagName, "v")
-				isCurrent := tagVersion == currentVersion
-
-				// Version header with current marker
-				if isCurrent {
-					fmt.Printf("%s▸ %s%s %s(current)%s\n", colorGreen, release.TagName, colorReset, colorGreen, colorReset)
-				} else {
-					fmt.Printf("%s▸ %s%s\n", colorCyan, release.TagName, colorReset)
-				}
-
-				// Release date
-				if release.PublishedAt != "" {
-					if t, err := time.Parse(time.RFC3339, release.PublishedAt); err == nil {
-						fmt.Printf("  %sReleased: %s%s\n", colorDim, t.Format("January 2, 2006"), colorReset)
-					}
-				}
-
-				// Release notes (body)
-				if release.Body != "" {
-					fmt.Println()
-					printReleaseBody(release.Body)
-				}
-
-				// Separator between releases
-				if i < len(releases)-1 {
-					fmt.Printf("\n%s───────────────────────────────────────────────────────────────%s\n\n", colorDim, colorReset)
-				}
-			}
-
-			fmt.Println()
-			fmt.Printf("%sView all releases: %shttps://github.com/Karonan/antigravity-sync/releases%s\n", colorDim, colorCyan, colorReset)
-			fmt.Println()
-
-			return nil
-		},
-	}
-
-	cmd.Flags().IntVarP(&limit, "limit", "n", 10, "Number of releases to show")
-
-	return cmd
-}
-
-// GitHubReleaseWithBody extends GitHubRelease with body and published date
-type GitHubReleaseWithBody struct {
-	TagName     string `json:"tag_name"`
-	Name        string `json:"name"`
-	Body        string `json:"body"`
-	PublishedAt string `json:"published_at"`
-	Assets      []struct {
-		Name               string `json:"name"`
-		BrowserDownloadURL string `json:"browser_download_url"`
-	} `json:"assets"`
-}
-
-func getAllReleases(limit int) ([]GitHubReleaseWithBody, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/Karonan/antigravity-sync/releases?per_page=%d", limit)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "antigravity-sync/"+version)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	var releases []GitHubReleaseWithBody
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return nil, err
-	}
-
-	return releases, nil
-}
-
-func printReleaseBody(body string) {
-	lines := strings.Split(body, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// Format markdown-style headers
-		if strings.HasPrefix(line, "## ") {
-			fmt.Printf("  %s%s%s\n", colorBold, strings.TrimPrefix(line, "## "), colorReset)
-			continue
-		}
-		if strings.HasPrefix(line, "### ") {
-			fmt.Printf("  %s%s%s\n", colorBold, strings.TrimPrefix(line, "### "), colorReset)
-			continue
-		}
-
-		// Format bullet points
-		if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
-			content := strings.TrimPrefix(strings.TrimPrefix(line, "- "), "* ")
-			fmt.Printf("  %s•%s %s\n", colorCyan, colorReset, content)
-			continue
-		}
-
-		// Regular text
-		fmt.Printf("  %s\n", line)
-	}
 }
 
 // MCP sync commands

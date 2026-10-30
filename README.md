@@ -5,7 +5,6 @@
 *Encrypted with [age](https://github.com/FiloSottile/age) • Cloudflare R2 (10GB Free Tier)*
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Karonan/antigravity-sync)](https://github.com/Karonan/antigravity-sync/releases)
 
 [Install](#install) • [Quick Start](#quick-start) • [Setup Guide](#setup-guide) • [What Gets Synced](#what-gets-synced) • [Commands](#commands) • [Architecture](#architecture)
 
@@ -30,15 +29,15 @@
 
 ## Install
 
-Download the binary for your platform from [GitHub Releases](https://github.com/Karonan/antigravity-sync/releases/latest), rename it to `antigravity-sync` (`antigravity-sync.exe` on Windows), and put it somewhere on your `PATH`.
-
-Or build it with Go 1.24+:
+Requires [Go 1.24+](https://go.dev/dl/):
 
 ```bash
-go install github.com/Karonan/antigravity-sync/cmd/antigravity-sync@latest
+go install github.com/Karonan/antigravity-sync/cmd/antigravity-sync@main
 ```
 
-Later, `antigravity-sync update` downloads the newest release.
+This builds the latest commit and puts `antigravity-sync` in Go's bin folder (`%USERPROFILE%\go\bin` on Windows, `~/go/bin` elsewhere), which is usually on your `PATH`. Later, `antigravity-sync update` rebuilds from the latest commit and replaces itself.
+
+For a device without Go, run `make build-all` on one that has it and copy the matching binary from `bin/`.
 
 ---
 
@@ -104,7 +103,7 @@ antigravity-sync pull
 | `antigravity-sync conflicts` | Review and resolve sync conflicts interactively |
 | `antigravity-sync paths` | Manage synced paths and exclude filters |
 | `antigravity-sync mcp` | Manage and sync MCP server configurations |
-| `antigravity-sync update` | Check and download binary updates from GitHub releases |
+| `antigravity-sync update` | Rebuild from the latest commit on `main` (needs Go) |
 | `antigravity-sync reset` | Reset local state or clear remote bucket |
 
 ---

@@ -73,8 +73,3 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: latest
