@@ -897,47 +897,45 @@ func diffCmd() *cobra.Command {
 				return nil
 			}
 
-			var localOnly, remoteOnly, modified, synced []sync.DiffEntry
+			groups := map[string][]sync.DiffEntry{}
 			for _, e := range entries {
-				switch e.Status {
-				case "local_only":
-					localOnly = append(localOnly, e)
-				case "remote_only":
-					remoteOnly = append(remoteOnly, e)
-				case "modified":
-					modified = append(modified, e)
-				case "synced":
-					synced = append(synced, e)
-				}
+				groups[e.Status] = append(groups[e.Status], e)
 			}
-
-			if len(localOnly) > 0 {
-				fmt.Printf("Local only (%d files):\n", len(localOnly))
-				for _, e := range localOnly {
-					fmt.Printf("  + %s (%s)\n", e.Path, util.FormatSize(e.LocalSize))
+			section := func(title string, statuses ...string) {
+				var list []sync.DiffEntry
+				for _, st := range statuses {
+					list = append(list, groups[st]...)
 				}
-				fmt.Println()
-			}
-
-			if len(remoteOnly) > 0 {
-				fmt.Printf("Remote only (%d files):\n", len(remoteOnly))
-				for _, e := range remoteOnly {
-					fmt.Printf("  - %s (%s)\n", e.Path, util.FormatSize(e.RemoteSize))
+				if len(list) == 0 {
+					return
+				}
+				sort.Slice(list, func(i, j int) bool { return list[i].Path < list[j].Path })
+				fmt.Printf("%s%s (%d)%s\n", colorCyan, title, len(list), colorReset)
+				for _, e := range list {
+					tag := map[string]string{
+						sync.DiffLocalNew: "new", sync.DiffLocalChanged: "changed", sync.DiffLocalDeleted: "deleted",
+						sync.DiffRemoteNew: "new", sync.DiffRemoteChanged: "changed",
+					}[e.Status]
+					if tag != "" {
+						tag = fmt.Sprintf("%s%-8s%s", colorDim, tag, colorReset)
+					}
+					fmt.Printf("  %s%s\n", tag, e.Path)
 				}
 				fmt.Println()
 			}
 
-			if len(modified) > 0 {
-				fmt.Printf("Modified (%d files):\n", len(modified))
-				for _, e := range modified {
-					fmt.Printf("  ~ %s (local: %s, remote: %s)\n", e.Path, util.FormatSize(e.LocalSize), util.FormatSize(e.RemoteSize))
-				}
-				fmt.Println()
+			section("Push will upload from this device", sync.DiffLocalNew, sync.DiffLocalChanged)
+			section("Deleted on this device: push deletes it from the cloud, pull brings it back", sync.DiffLocalDeleted)
+			section("Pull will download to this device", sync.DiffRemoteNew, sync.DiffRemoteChanged)
+			section("Changed on both sides: pull keeps yours and saves the cloud copy as .conflict", sync.DiffBothChanged)
+			section("Different, but no sync record says which side changed", sync.DiffUnknown)
+
+			pending := len(entries) - len(groups[sync.DiffSynced])
+			if pending == 0 {
+				fmt.Printf("%s✓%s Everything is in sync (%d files)\n", colorGreen, colorReset, len(entries))
+			} else {
+				fmt.Printf("%d files in sync, %d waiting for push or pull\n", len(groups[sync.DiffSynced]), pending)
 			}
-
-			fmt.Printf("Summary: %d synced, %d local only, %d remote only, %d modified\n",
-				len(synced), len(localOnly), len(remoteOnly), len(modified))
-
 			return nil
 		},
 	}
@@ -1076,7 +1074,9 @@ func batchResolveConflicts(conflicts []conflictFile, keep string, geminiDir stri
 		}
 
 		// Update state with the resolved file's hash
+		// State keys use "/" (as GetLocalFiles does), or Windows gets a duplicate entry
 		relPath, _ := filepath.Rel(geminiDir, c.OriginalPath)
+		relPath = filepath.ToSlash(relPath)
 		if info, err := os.Stat(c.OriginalPath); err == nil {
 			if hash, err := sync.HashFile(c.OriginalPath); err == nil {
 				state.UpdateFile(relPath, info, hash)
@@ -1111,6 +1111,7 @@ func interactiveResolveConflicts(conflicts []conflictFile, geminiDir string, sta
 	resolved := 0
 	for i, c := range conflicts {
 		relOriginal, _ := filepath.Rel(geminiDir, c.OriginalPath)
+		relOriginal = filepath.ToSlash(relOriginal) // state keys use "/"
 
 		// Get file sizes for context
 		localInfo, _ := os.Stat(c.OriginalPath)
@@ -1850,7 +1851,7 @@ func showPullPreview(ctx context.Context, syncer *sync.Syncer) error {
 	if len(preview.WouldDownload) > 0 {
 		fmt.Printf("Would download (%d new files):\n", len(preview.WouldDownload))
 		for _, f := range preview.WouldDownload {
-			fmt.Printf("  %s+%s %s (%s)\n", colorGreen, colorReset, f.Path, util.FormatSize(f.RemoteSize))
+			fmt.Printf("  %s+%s %s\n", colorGreen, colorReset, f.Path)
 		}
 		fmt.Println()
 	}
@@ -1859,9 +1860,8 @@ func showPullPreview(ctx context.Context, syncer *sync.Syncer) error {
 	if len(preview.WouldOverwrite) > 0 {
 		fmt.Printf("Would overwrite (%d files):\n", len(preview.WouldOverwrite))
 		for _, f := range preview.WouldOverwrite {
-			fmt.Printf("  %s~%s %s (local: %s, remote: %s)\n",
-				colorYellow, colorReset, f.Path,
-				util.FormatSize(f.LocalSize), util.FormatSize(f.RemoteSize))
+			// No remote size: R2 holds the compressed, encrypted file, so it never matches the local one
+			fmt.Printf("  %s~%s %s\n", colorYellow, colorReset, f.Path)
 		}
 		fmt.Println()
 	}
@@ -1871,15 +1871,6 @@ func showPullPreview(ctx context.Context, syncer *sync.Syncer) error {
 		fmt.Printf("Would create conflicts (%d files):\n", len(preview.WouldConflict))
 		for _, f := range preview.WouldConflict {
 			fmt.Printf("  %s!%s %s (both local and remote changed)\n", colorYellow, colorReset, f.Path)
-		}
-		fmt.Println()
-	}
-
-	// Show files that would be kept
-	if len(preview.WouldKeep) > 0 {
-		fmt.Printf("Would keep local (%d files newer locally):\n", len(preview.WouldKeep))
-		for _, f := range preview.WouldKeep {
-			fmt.Printf("  %s=%s %s\n", colorDim, colorReset, f.Path)
 		}
 		fmt.Println()
 	}

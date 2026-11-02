@@ -142,7 +142,7 @@ func (s *Syncer) progress(event ProgressEvent) {
 }
 
 func (s *Syncer) isExcluded(relPath string) bool {
-	return s.cfg.IsExcluded(relPath)
+	return IsConflictCopy(relPath) || s.cfg.IsExcluded(relPath)
 }
 
 // syncPaths returns the set of ~/.claude paths to sync, honoring both the
@@ -323,9 +323,8 @@ func (s *Syncer) Pull(ctx context.Context) (*SyncResult, error) {
 		if !localExists {
 			shouldDownload = true
 		} else if stateFile != nil {
-			// Check if remote is newer than our last known state
-			if remoteObj.LastModified.After(stateFile.Uploaded) {
-				// Remote was updated after we last uploaded
+			// Check if remote changed since the version we last synced
+			if stateFile.RemoteChanged(remoteObj.LastModified) {
 				// Check if local was also modified
 				localHash, _ := HashFile(filepath.Join(s.claudeDir, localPath))
 				if localHash != stateFile.Hash {
@@ -337,10 +336,16 @@ func (s *Syncer) Pull(ctx context.Context) (*SyncResult, error) {
 					})
 					if err := s.handleConflict(ctx, localPath, remoteObj); err != nil {
 						result.Errors = append(result.Errors, err)
+					} else {
+						// This remote version is saved; don't copy it again on every pull
+						s.state.MarkRemote(localPath, remoteObj.LastModified)
 					}
 					continue
 				}
 				shouldDownload = true
+			} else if stateFile.RemoteModTime.IsZero() {
+				// Remote is the version we synced: backfill state written by older versions
+				s.state.MarkRemote(localPath, remoteObj.LastModified)
 			}
 		} else if localInfo.ModTime().Before(remoteObj.LastModified) {
 			shouldDownload = true
@@ -394,6 +399,7 @@ func (s *Syncer) Pull(ctx context.Context) (*SyncResult, error) {
 					mu.Unlock()
 					return
 				}
+				s.state.MarkRemote(task.localPath, task.remoteObj.LastModified)
 				mu.Lock()
 				result.Downloaded = append(result.Downloaded, task.localPath)
 				mu.Unlock()
@@ -454,6 +460,10 @@ func (s *Syncer) uploadFile(ctx context.Context, relativePath string) error {
 	hash, _ := HashFile(fullPath)
 	s.state.UpdateFile(relativePath, info, hash)
 	s.state.MarkUploaded(relativePath)
+	// Best-effort: without it, the next pull falls back to this device's clock
+	if obj, err := s.storage.Head(ctx, remoteKey); err == nil {
+		s.state.MarkRemote(relativePath, obj.LastModified)
+	}
 
 	return nil
 }
@@ -746,9 +756,8 @@ func (s *Syncer) PreviewPull(ctx context.Context) (*PullPreview, error) {
 			fp.RemoteOnly = true
 			preview.WouldDownload = append(preview.WouldDownload, fp)
 		} else if stateFile != nil {
-			// Check if remote is newer than our last known state
-			if remoteObj.LastModified.After(stateFile.Uploaded) {
-				// Remote was updated after we last uploaded
+			// Check if remote changed since the version we last synced
+			if stateFile.RemoteChanged(remoteObj.LastModified) {
 				localHash, _ := HashFile(filepath.Join(s.claudeDir, localPath))
 				if localHash != stateFile.Hash {
 					// Conflict: both changed
@@ -788,12 +797,24 @@ func (s *Syncer) PreviewPull(ctx context.Context) (*PullPreview, error) {
 
 type DiffEntry struct {
 	Path       string
-	Status     string // "local_only", "remote_only", "modified", "synced"
+	Status     string // see the Diff* constants
 	LocalSize  int64
 	RemoteSize int64
 	LocalTime  time.Time
 	RemoteTime time.Time
 }
+
+// Diff statuses, named by what push/pull will do with the file.
+const (
+	DiffSynced        = "synced"
+	DiffLocalNew      = "local_new"      // push uploads it
+	DiffLocalChanged  = "local_changed"  // push uploads it
+	DiffLocalDeleted  = "local_deleted"  // push deletes it from remote, pull brings it back
+	DiffRemoteNew     = "remote_new"     // pull downloads it
+	DiffRemoteChanged = "remote_changed" // pull downloads it
+	DiffBothChanged   = "both_changed"   // pull keeps local, saves remote as .conflict
+	DiffUnknown       = "unknown"        // differs, but no sync record says which side changed
+)
 
 func (s *Syncer) Diff(ctx context.Context) ([]DiffEntry, error) {
 	var entries []DiffEntry
@@ -812,61 +833,38 @@ func (s *Syncer) Diff(ctx context.Context) ([]DiffEntry, error) {
 
 	remoteFiles, _ := s.buildRemoteMap(remoteObjects)
 
-	// Find local-only and modified files
 	for relPath, info := range localFiles {
-		remoteObj, exists := remoteFiles[relPath]
-		if !exists {
-			entries = append(entries, DiffEntry{
-				Path:      relPath,
-				Status:    "local_only",
-				LocalSize: info.Size(),
-				LocalTime: info.ModTime(),
-			})
-		} else {
-			stateFile := s.state.GetFile(relPath)
-			if stateFile != nil {
+		e := DiffEntry{Path: relPath, Status: DiffLocalNew, LocalSize: info.Size(), LocalTime: info.ModTime()}
+		if remoteObj, exists := remoteFiles[relPath]; exists {
+			e.RemoteSize, e.RemoteTime = remoteObj.Size, remoteObj.LastModified
+			e.Status = DiffUnknown
+			if stateFile := s.state.GetFile(relPath); stateFile != nil {
 				localHash, _ := HashFile(filepath.Join(s.claudeDir, relPath))
-				if localHash != stateFile.Hash || remoteObj.LastModified.After(stateFile.Uploaded) {
-					entries = append(entries, DiffEntry{
-						Path:       relPath,
-						Status:     "modified",
-						LocalSize:  info.Size(),
-						RemoteSize: remoteObj.Size,
-						LocalTime:  info.ModTime(),
-						RemoteTime: remoteObj.LastModified,
-					})
-				} else {
-					entries = append(entries, DiffEntry{
-						Path:       relPath,
-						Status:     "synced",
-						LocalSize:  info.Size(),
-						RemoteSize: remoteObj.Size,
-						LocalTime:  info.ModTime(),
-						RemoteTime: remoteObj.LastModified,
-					})
+				localChanged := localHash != stateFile.Hash
+				remoteChanged := stateFile.RemoteChanged(remoteObj.LastModified)
+				switch {
+				case localChanged && remoteChanged:
+					e.Status = DiffBothChanged
+				case localChanged:
+					e.Status = DiffLocalChanged
+				case remoteChanged:
+					e.Status = DiffRemoteChanged
+				default:
+					e.Status = DiffSynced
 				}
-			} else {
-				entries = append(entries, DiffEntry{
-					Path:       relPath,
-					Status:     "modified",
-					LocalSize:  info.Size(),
-					RemoteSize: remoteObj.Size,
-					LocalTime:  info.ModTime(),
-					RemoteTime: remoteObj.LastModified,
-				})
 			}
 		}
+		entries = append(entries, e)
 	}
 
-	// Find remote-only files
 	for relPath, obj := range remoteFiles {
 		if _, exists := localFiles[relPath]; !exists {
-			entries = append(entries, DiffEntry{
-				Path:       relPath,
-				Status:     "remote_only",
-				RemoteSize: obj.Size,
-				RemoteTime: obj.LastModified,
-			})
+			status := DiffRemoteNew
+			// Synced before and gone now: deleted on this device
+			if s.state.GetFile(relPath) != nil {
+				status = DiffLocalDeleted
+			}
+			entries = append(entries, DiffEntry{Path: relPath, Status: status, RemoteSize: obj.Size, RemoteTime: obj.LastModified})
 		}
 	}
 
