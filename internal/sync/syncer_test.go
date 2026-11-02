@@ -148,6 +148,7 @@ func TestSyncerPull_DownloadsNewFiles(t *testing.T) {
 
 	// Create a file on syncer1 and push
 	createTestFile(t, claudeDir1, "CLAUDE.md", "# Shared Settings")
+	createTestFile(t, claudeDir1, "settings.json", "{}")
 	_, err := syncer1.Push(ctx)
 	if err != nil {
 		t.Fatalf("Push from syncer1 failed: %v", err)
@@ -167,7 +168,8 @@ func TestSyncerPull_DownloadsNewFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load state2: %v", err)
 	}
-	syncer2 := NewSyncerWith(&config.Config{}, store, syncer1.encryptor, state2, claudeDir2, true)
+	// syncer2 syncs less than syncer1, so settings.json must stay remote-only
+	syncer2 := NewSyncerWith(&config.Config{SyncPaths: []string{"CLAUDE.md"}}, store, syncer1.encryptor, state2, claudeDir2, true)
 
 	// Pull from syncer2
 	result, err := syncer2.Pull(ctx)
@@ -185,6 +187,9 @@ func TestSyncerPull_DownloadsNewFiles(t *testing.T) {
 	}
 	if string(data) != "# Shared Settings" {
 		t.Errorf("Downloaded content mismatch: got %q", string(data))
+	}
+	if _, err := os.Stat(filepath.Join(claudeDir2, "settings.json")); !os.IsNotExist(err) {
+		t.Errorf("settings.json is outside syncer2's sync paths but was pulled")
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -634,6 +635,7 @@ func (s *Syncer) localPath(remoteKey string) (string, bool) {
 // normalized replacement both exist, the normalized one wins.
 func (s *Syncer) buildRemoteMap(remoteObjects []storage.ObjectInfo) (remoteFiles map[string]storage.ObjectInfo, skipped []string) {
 	remoteFiles = make(map[string]storage.ObjectInfo)
+	syncPaths := s.syncPaths()
 	for _, obj := range remoteObjects {
 		// Skip non-encrypted files
 		if !strings.HasSuffix(obj.Key, ".age") {
@@ -654,6 +656,13 @@ func (s *Syncer) buildRemoteMap(remoteObjects []storage.ObjectInfo) (remoteFiles
 		}
 		// Skip excluded paths
 		if s.isExcluded(localPath) {
+			continue
+		}
+		// Another device with wider sync paths or scope may have uploaded files this one doesn't sync
+		if !slices.ContainsFunc(syncPaths, func(p string) bool {
+			p = strings.TrimSuffix(filepath.ToSlash(p), "/")
+			return localPath == p || strings.HasPrefix(localPath, p+"/")
+		}) {
 			continue
 		}
 		if existing, dup := remoteFiles[localPath]; dup {
