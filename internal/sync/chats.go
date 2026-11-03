@@ -5,13 +5,90 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 
 	"github.com/Karonan/antigravity-sync/internal/storage"
 )
 
 // summariesCachePath is Antigravity's sidebar cache, which holds every chat's title.
 const summariesCachePath = "antigravity/agyhub_summaries_proto.pb"
+
+// chatLists are rewritten by Antigravity every time it opens, so they nearly
+// always differ on both devices even when no chat changed.
+var chatLists = map[string]bool{
+	"antigravity/conversation_summaries.db": true,
+	summariesCachePath:                      true,
+}
+
+// remoteWinsFunc returns a check for files changed on both sides: true means
+// take the remote copy instead of saving it as a .conflict. That holds for the
+// chat lists while this device has no chat changes to push, because the remote
+// copies then already list every chat.
+func (s *Syncer) remoteWinsFunc() func(relPath string) bool {
+	var once sync.Once
+	pending := true
+	return func(relPath string) bool {
+		if !chatLists[relPath] {
+			return false
+		}
+		once.Do(func() {
+			changes, err := s.state.DetectChanges(s.claudeDir, s.syncPaths(), s.isExcluded)
+			pending = err != nil || slices.ContainsFunc(changes, func(c FileChange) bool {
+				_, _, isChat := ChatID(c.Path)
+				return isChat
+			})
+		})
+		return !pending
+	}
+}
+
+// deletedElsewhere returns local files another device deleted: synced before,
+// gone from remote now, and unchanged here since. A file changed here stays,
+// and push uploads it again. Nothing counts as deleted while some remote keys
+// can't be mapped to local paths, since those files only look missing.
+func (s *Syncer) deletedElsewhere(localFiles map[string]os.FileInfo, remoteFiles map[string]storage.ObjectInfo, skipped []string) map[string]bool {
+	deleted := map[string]bool{}
+	if len(skipped) > 0 || len(remoteFiles) == 0 {
+		return deleted
+	}
+	for relPath := range localFiles {
+		stateFile := s.state.GetFile(relPath)
+		if _, exists := remoteFiles[relPath]; exists || stateFile == nil {
+			continue
+		}
+		if hash, err := HashFile(filepath.Join(s.claudeDir, relPath)); err == nil && hash == stateFile.Hash {
+			deleted[relPath] = true
+		}
+	}
+	return deleted
+}
+
+// removeLocal moves a file deleted on another device into trashDir, keeping
+// its relative path so it can be put back.
+func (s *Syncer) removeLocal(relPath, trashDir string) error {
+	src := filepath.Join(s.claudeDir, relPath)
+	dst := filepath.Join(trashDir, relPath)
+	if err := os.MkdirAll(filepath.Dir(dst), 0700); err != nil {
+		return err
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return err
+	}
+	if strings.HasSuffix(relPath, ".db") {
+		// SQLite side files belong to the database just moved
+		for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+			_ = os.Rename(src+suffix, dst+suffix)
+		}
+	}
+	// Drop folders left empty, such as a removed chat's brain/<id>/
+	root := filepath.Clean(s.claudeDir)
+	for dir := filepath.Dir(src); dir != root && strings.HasPrefix(dir, root) && os.Remove(dir) == nil; dir = filepath.Dir(dir) {
+	}
+	s.state.RemoveFile(relPath)
+	return nil
+}
 
 // ChatID returns the chat a synced path belongs to, and the part of the path
 // after the chat's id ("" for the chat's own .db file).

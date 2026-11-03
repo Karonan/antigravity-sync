@@ -313,6 +313,7 @@ func (s *Syncer) Pull(ctx context.Context) (*SyncResult, error) {
 		remoteObj storage.ObjectInfo
 	}
 	var toDownload []downloadTask
+	remoteWins := s.remoteWinsFunc()
 
 	for localPath, remoteObj := range remoteFiles {
 		localInfo, localExists := localFiles[localPath]
@@ -327,7 +328,7 @@ func (s *Syncer) Pull(ctx context.Context) (*SyncResult, error) {
 			if stateFile.RemoteChanged(remoteObj.LastModified) {
 				// Check if local was also modified
 				localHash, _ := HashFile(filepath.Join(s.claudeDir, localPath))
-				if localHash != stateFile.Hash {
+				if localHash != stateFile.Hash && !remoteWins(localPath) {
 					// Conflict: both changed
 					result.Conflicts = append(result.Conflicts, localPath)
 					s.progress(ProgressEvent{
@@ -353,6 +354,20 @@ func (s *Syncer) Pull(ctx context.Context) (*SyncResult, error) {
 
 		if shouldDownload {
 			toDownload = append(toDownload, downloadTask{localPath, remoteObj})
+		}
+	}
+
+	if deleted := s.deletedElsewhere(localFiles, remoteFiles, skipped); len(deleted) > 0 {
+		trashDir := filepath.Join(filepath.Dir(s.claudeDir), ".gemini-removed", time.Now().Format("2006-01-02-150405"))
+		for relPath := range deleted {
+			if err := s.removeLocal(relPath, trashDir); err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("%s: failed to remove: %w", relPath, err))
+				continue
+			}
+			result.Deleted = append(result.Deleted, relPath)
+		}
+		if len(result.Deleted) > 0 {
+			s.log("Moved %d files deleted on another device to %s", len(result.Deleted), trashDir)
 		}
 	}
 
@@ -719,6 +734,7 @@ type PullPreview struct {
 	WouldOverwrite []FilePreview // Existing local files that would be replaced
 	WouldKeep      []FilePreview // Local files that would be kept (local newer)
 	WouldConflict  []FilePreview // Files that would create a conflict
+	WouldDelete    []FilePreview // Local files another device deleted
 	LocalOnlyFiles []FilePreview // Files that exist only locally
 }
 
@@ -734,13 +750,14 @@ func (s *Syncer) PreviewPull(ctx context.Context) (*PullPreview, error) {
 	}
 
 	// Build remote file map
-	remoteFiles, _ := s.buildRemoteMap(remoteObjects)
+	remoteFiles, skipped := s.buildRemoteMap(remoteObjects)
 
 	// Get current local files
 	localFiles, err := GetLocalFiles(s.claudeDir, s.syncPaths(), s.isExcluded)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get local files: %w", err)
 	}
+	remoteWins := s.remoteWinsFunc()
 
 	// Analyze each remote file
 	for localPath, remoteObj := range remoteFiles {
@@ -766,7 +783,7 @@ func (s *Syncer) PreviewPull(ctx context.Context) (*PullPreview, error) {
 			// Check if remote changed since the version we last synced
 			if stateFile.RemoteChanged(remoteObj.LastModified) {
 				localHash, _ := HashFile(filepath.Join(s.claudeDir, localPath))
-				if localHash != stateFile.Hash {
+				if localHash != stateFile.Hash && !remoteWins(localPath) {
 					// Conflict: both changed
 					preview.WouldConflict = append(preview.WouldConflict, fp)
 				} else {
@@ -788,8 +805,11 @@ func (s *Syncer) PreviewPull(ctx context.Context) (*PullPreview, error) {
 	}
 
 	// Find local-only files
+	deleted := s.deletedElsewhere(localFiles, remoteFiles, skipped)
 	for localPath, localInfo := range localFiles {
-		if _, exists := remoteFiles[localPath]; !exists {
+		if deleted[localPath] {
+			preview.WouldDelete = append(preview.WouldDelete, FilePreview{Path: localPath, LocalTime: localInfo.ModTime(), LocalSize: localInfo.Size()})
+		} else if _, exists := remoteFiles[localPath]; !exists {
 			preview.LocalOnlyFiles = append(preview.LocalOnlyFiles, FilePreview{
 				Path:      localPath,
 				LocalTime: localInfo.ModTime(),
@@ -820,6 +840,7 @@ const (
 	DiffLocalDeleted  = "local_deleted"  // push deletes it from remote, pull brings it back
 	DiffRemoteNew     = "remote_new"     // pull downloads it
 	DiffRemoteChanged = "remote_changed" // pull downloads it
+	DiffRemoteDeleted = "remote_deleted" // another device deleted it; pull removes it here
 	DiffBothChanged   = "both_changed"   // pull keeps local, saves remote as .conflict
 	DiffUnknown       = "unknown"        // differs, but no sync record says which side changed
 )
@@ -839,11 +860,15 @@ func (s *Syncer) Diff(ctx context.Context) ([]DiffEntry, error) {
 		return nil, fmt.Errorf("failed to list remote objects: %w", err)
 	}
 
-	remoteFiles, _ := s.buildRemoteMap(remoteObjects)
+	remoteFiles, skipped := s.buildRemoteMap(remoteObjects)
+	deleted := s.deletedElsewhere(localFiles, remoteFiles, skipped)
+	remoteWins := s.remoteWinsFunc()
 
 	for relPath, info := range localFiles {
 		e := DiffEntry{Path: relPath, Status: DiffLocalNew, LocalSize: info.Size(), LocalTime: info.ModTime()}
-		if remoteObj, exists := remoteFiles[relPath]; exists {
+		if deleted[relPath] {
+			e.Status = DiffRemoteDeleted
+		} else if remoteObj, exists := remoteFiles[relPath]; exists {
 			e.RemoteSize, e.RemoteTime = remoteObj.Size, remoteObj.LastModified
 			e.Status = DiffUnknown
 			if stateFile := s.state.GetFile(relPath); stateFile != nil {
@@ -851,12 +876,12 @@ func (s *Syncer) Diff(ctx context.Context) ([]DiffEntry, error) {
 				localChanged := localHash != stateFile.Hash
 				remoteChanged := stateFile.RemoteChanged(remoteObj.LastModified)
 				switch {
-				case localChanged && remoteChanged:
+				case localChanged && remoteChanged && !remoteWins(relPath):
 					e.Status = DiffBothChanged
-				case localChanged:
-					e.Status = DiffLocalChanged
 				case remoteChanged:
 					e.Status = DiffRemoteChanged
+				case localChanged:
+					e.Status = DiffLocalChanged
 				default:
 					e.Status = DiffSynced
 				}

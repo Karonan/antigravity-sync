@@ -816,3 +816,95 @@ func TestDiffStatusesFollowPushPullActions(t *testing.T) {
 		}
 	}
 }
+
+// Files another device deleted are moved out of the way here, unless they changed here.
+func TestPullRemovesFilesDeletedElsewhere(t *testing.T) {
+	env := setupTestEnv(t)
+	ctx := context.Background()
+
+	writeFile(t, env.claudeDir, "agents/gone.md", "v1")
+	writeFile(t, env.claudeDir, "agents/edited.md", "v1")
+	writeFile(t, env.claudeDir, "agents/kept.md", "v1")
+	if _, err := env.syncer.Push(ctx); err != nil {
+		t.Fatalf("Push failed: %v", err)
+	}
+	// Another device deletes two of them; this device edits one meanwhile
+	for _, key := range []string{"agents/gone.md.age", "agents/edited.md.age"} {
+		if err := env.store.Delete(ctx, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(t, env.claudeDir, "agents/edited.md", "v2")
+
+	entries, err := env.syncer.Diff(ctx)
+	if err != nil {
+		t.Fatalf("Diff failed: %v", err)
+	}
+	for _, e := range entries {
+		if (e.Path == "agents/gone.md") != (e.Status == DiffRemoteDeleted) {
+			t.Errorf("%s: status %q", e.Path, e.Status)
+		}
+	}
+
+	result, err := env.syncer.Pull(ctx)
+	if err != nil {
+		t.Fatalf("Pull failed: %v", err)
+	}
+	if len(result.Deleted) != 1 || result.Deleted[0] != "agents/gone.md" {
+		t.Errorf("Deleted = %v", result.Deleted)
+	}
+	if _, err := os.Stat(filepath.Join(env.claudeDir, "agents/gone.md")); !os.IsNotExist(err) {
+		t.Error("gone.md still in place")
+	}
+	moved, _ := filepath.Glob(filepath.Join(filepath.Dir(env.claudeDir), ".gemini-removed", "*", "agents", "gone.md"))
+	if len(moved) != 1 {
+		t.Errorf("gone.md not moved to .gemini-removed: %v", moved)
+	}
+	for _, name := range []string{"agents/edited.md", "agents/kept.md"} {
+		if _, err := os.Stat(filepath.Join(env.claudeDir, name)); err != nil {
+			t.Errorf("%s was removed", name)
+		}
+	}
+	if env.syncer.state.GetFile("agents/gone.md") != nil {
+		t.Error("gone.md still in sync state")
+	}
+}
+
+// Antigravity rewrites its chat lists on every launch: take the remote copy
+// instead of a .conflict, unless this device has chat changes to push.
+func TestPullTakesRemoteChatListsWhenNoChatsPending(t *testing.T) {
+	const list = "antigravity/conversation_summaries.db"
+	const chat = "antigravity/conversations/11111111-2222-3333-4444-555555555555.db"
+	for _, chatPending := range []bool{false, true} {
+		env := setupTestEnv(t)
+		env.syncer.cfg.SyncPaths = []string{"antigravity"}
+		ctx := context.Background()
+
+		writeFile(t, env.claudeDir, list, "v1")
+		writeFile(t, env.claudeDir, chat, "v1")
+		if _, err := env.syncer.Push(ctx); err != nil {
+			t.Fatalf("Push failed: %v", err)
+		}
+		writeFile(t, env.claudeDir, list, "local")
+		if chatPending {
+			writeFile(t, env.claudeDir, chat, "local")
+		}
+		encrypted, _ := env.syncer.encryptor.Encrypt([]byte("remote"))
+		if err := env.store.Upload(ctx, list+".age", encrypted); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := env.syncer.Pull(ctx)
+		if err != nil {
+			t.Fatalf("Pull failed: %v", err)
+		}
+		data, _ := os.ReadFile(filepath.Join(env.claudeDir, list))
+		if chatPending {
+			if len(result.Conflicts) != 1 || string(data) != "local" {
+				t.Errorf("chat pending: want a conflict keeping local, got %v and %q", result.Conflicts, data)
+			}
+		} else if len(result.Conflicts) != 0 || string(data) != "remote" {
+			t.Errorf("no chat pending: want remote copy, got %v and %q", result.Conflicts, data)
+		}
+	}
+}

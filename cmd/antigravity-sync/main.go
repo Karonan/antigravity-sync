@@ -738,13 +738,16 @@ Examples:
 			if !quiet {
 				fmt.Println() // Clear the progress line
 
-				if len(result.Downloaded) == 0 && len(result.Conflicts) == 0 && len(result.Errors) == 0 {
+				if len(result.Downloaded) == 0 && len(result.Deleted) == 0 && len(result.Conflicts) == 0 && len(result.Errors) == 0 {
 					// Already printed "Already up to date"
 				} else {
 					// Summary
 					var parts []string
 					if len(result.Downloaded) > 0 {
 						parts = append(parts, fmt.Sprintf("%s%d downloaded%s", colorGreen, len(result.Downloaded), colorReset))
+					}
+					if len(result.Deleted) > 0 {
+						parts = append(parts, fmt.Sprintf("%s%d removed (deleted on another device)%s", colorGreen, len(result.Deleted), colorReset))
 					}
 					if len(result.Conflicts) > 0 {
 						parts = append(parts, fmt.Sprintf("%s%d conflicts%s", colorYellow, len(result.Conflicts), colorReset))
@@ -914,7 +917,7 @@ func diffCmd() *cobra.Command {
 				for _, e := range list {
 					tag := map[string]string{
 						sync.DiffLocalNew: "new", sync.DiffLocalChanged: "changed", sync.DiffLocalDeleted: "deleted",
-						sync.DiffRemoteNew: "new", sync.DiffRemoteChanged: "changed",
+						sync.DiffRemoteNew: "new", sync.DiffRemoteChanged: "changed", sync.DiffRemoteDeleted: "deleted",
 					}[e.Status]
 					if tag != "" {
 						tag = fmt.Sprintf("%s%-8s%s", colorDim, tag, colorReset)
@@ -927,6 +930,7 @@ func diffCmd() *cobra.Command {
 			section("Push will upload from this device", sync.DiffLocalNew, sync.DiffLocalChanged)
 			section("Deleted on this device: push deletes it from the cloud, pull brings it back", sync.DiffLocalDeleted)
 			section("Pull will download to this device", sync.DiffRemoteNew, sync.DiffRemoteChanged)
+			section("Deleted on another device: pull removes it here (moved to ~/.gemini-removed)", sync.DiffRemoteDeleted)
 			section("Changed on both sides: pull keeps yours and saves the cloud copy as .conflict", sync.DiffBothChanged)
 			section("Different, but no sync record says which side changed", sync.DiffUnknown)
 
@@ -1854,7 +1858,7 @@ func showPullPreview(ctx context.Context, syncer *sync.Syncer) error {
 	}
 
 	// If nothing would happen
-	total := len(preview.WouldDownload) + len(preview.WouldOverwrite) + len(preview.WouldConflict)
+	total := len(preview.WouldDownload) + len(preview.WouldOverwrite) + len(preview.WouldConflict) + len(preview.WouldDelete)
 	if total == 0 {
 		fmt.Printf("%s✓%s Already up to date (dry run)\n", colorGreen, colorReset)
 		return nil
@@ -1882,6 +1886,14 @@ func showPullPreview(ctx context.Context, syncer *sync.Syncer) error {
 		fmt.Println()
 	}
 
+	if len(preview.WouldDelete) > 0 {
+		fmt.Printf("Would remove (%d files deleted on another device, moved to ~/.gemini-removed):\n", len(preview.WouldDelete))
+		for _, f := range preview.WouldDelete {
+			fmt.Printf("  %s-%s %s\n", colorYellow, colorReset, f.Path)
+		}
+		fmt.Println()
+	}
+
 	// Show files that would conflict
 	if len(preview.WouldConflict) > 0 {
 		fmt.Printf("Would create conflicts (%d files):\n", len(preview.WouldConflict))
@@ -1892,10 +1904,11 @@ func showPullPreview(ctx context.Context, syncer *sync.Syncer) error {
 	}
 
 	// Summary
-	fmt.Printf("%sSummary:%s %d would download, %d would overwrite, %d conflicts, %d unchanged\n",
+	fmt.Printf("%sSummary:%s %d would download, %d would overwrite, %d would remove, %d conflicts, %d unchanged\n",
 		colorBold, colorReset,
 		len(preview.WouldDownload),
 		len(preview.WouldOverwrite),
+		len(preview.WouldDelete),
 		len(preview.WouldConflict),
 		len(preview.WouldKeep))
 	fmt.Println()
@@ -1947,12 +1960,15 @@ func executePull(ctx context.Context, syncer *sync.Syncer) error {
 	if !quiet {
 		fmt.Println()
 
-		if len(result.Downloaded) == 0 && len(result.Conflicts) == 0 && len(result.Errors) == 0 {
+		if len(result.Downloaded) == 0 && len(result.Deleted) == 0 && len(result.Conflicts) == 0 && len(result.Errors) == 0 {
 			// Already printed "Already up to date"
 		} else {
 			var parts []string
 			if len(result.Downloaded) > 0 {
 				parts = append(parts, fmt.Sprintf("%s%d downloaded%s", colorGreen, len(result.Downloaded), colorReset))
+			}
+			if len(result.Deleted) > 0 {
+				parts = append(parts, fmt.Sprintf("%s%d removed (deleted on another device)%s", colorGreen, len(result.Deleted), colorReset))
 			}
 			if len(result.Conflicts) > 0 {
 				parts = append(parts, fmt.Sprintf("%s%d conflicts%s", colorYellow, len(result.Conflicts), colorReset))
