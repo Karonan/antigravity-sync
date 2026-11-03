@@ -468,27 +468,34 @@ func (s *Syncer) uploadFile(ctx context.Context, relativePath string) error {
 	return nil
 }
 
-// downloadFile downloads and decrypts a file from remote storage.
-// If originalMtime is non-nil, the file's modification time will be restored to that value.
-func (s *Syncer) downloadFile(ctx context.Context, relativePath, remoteKey string, originalMtime *time.Time) error {
-	// Download
+// fetch downloads, decrypts and decompresses a remote object.
+func (s *Syncer) fetch(ctx context.Context, remoteKey string) ([]byte, error) {
 	encrypted, err := s.storage.Download(ctx, remoteKey)
 	if err != nil {
-		return fmt.Errorf("failed to download: %w", err)
+		return nil, fmt.Errorf("failed to download: %w", err)
 	}
 
-	// Decrypt
 	data, err := s.encryptor.Decrypt(encrypted)
 	if err != nil {
-		return fmt.Errorf("failed to decrypt: %w", err)
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
 	}
 
 	// Decompress if gzipped (backward-compatible with uncompressed data)
 	if isGzipped(data) {
 		data, err = gzipDecompress(data)
 		if err != nil {
-			return fmt.Errorf("failed to decompress: %w", err)
+			return nil, fmt.Errorf("failed to decompress: %w", err)
 		}
+	}
+	return data, nil
+}
+
+// downloadFile downloads and decrypts a file from remote storage.
+// If originalMtime is non-nil, the file's modification time will be restored to that value.
+func (s *Syncer) downloadFile(ctx context.Context, relativePath, remoteKey string, originalMtime *time.Time) error {
+	data, err := s.fetch(ctx, remoteKey)
+	if err != nil {
+		return err
 	}
 
 	// Replace portable tokens with this device's paths in session content
@@ -798,6 +805,7 @@ func (s *Syncer) PreviewPull(ctx context.Context) (*PullPreview, error) {
 type DiffEntry struct {
 	Path       string
 	Status     string // see the Diff* constants
+	Title      string // title of the chat the file belongs to, if known
 	LocalSize  int64
 	RemoteSize int64
 	LocalTime  time.Time
@@ -868,6 +876,7 @@ func (s *Syncer) Diff(ctx context.Context) ([]DiffEntry, error) {
 		}
 	}
 
+	s.addChatTitles(ctx, entries, remoteFiles)
 	return entries, nil
 }
 

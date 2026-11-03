@@ -919,7 +919,7 @@ func diffCmd() *cobra.Command {
 					if tag != "" {
 						tag = fmt.Sprintf("%s%-8s%s", colorDim, tag, colorReset)
 					}
-					fmt.Printf("  %s%s\n", tag, e.Path)
+					fmt.Printf("  %s%s\n", tag, diffLabel(e))
 				}
 				fmt.Println()
 			}
@@ -939,6 +939,22 @@ func diffCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// diffLabel names a chat's files by the chat's title instead of its id.
+func diffLabel(e sync.DiffEntry) string {
+	id, rest, ok := sync.ChatID(e.Path)
+	if !ok {
+		return e.Path
+	}
+	chat := fmt.Sprintf("chat %s (title unknown)", id[:8])
+	if e.Title != "" {
+		chat = fmt.Sprintf("chat %q", e.Title)
+	}
+	if rest == "" {
+		return chat
+	}
+	return fmt.Sprintf("%s: %s%s%s", chat, colorDim, rest, colorReset)
 }
 
 type conflictFile struct {
